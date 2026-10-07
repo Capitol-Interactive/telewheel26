@@ -97,6 +97,21 @@ namespace Telewheel
                 return TMPro.TMP_Settings.defaultFontAsset == null ? null : TMPro.TMP_Settings.defaultFontAsset.name;
             }, null);
 
+            Check(report, "Environments", () =>
+            {
+                List<string> names = OpenBrushFacade.SelectableEnvironmentNames();
+                return names.Count > 0 ? names.Count + " the host can pick, e.g. " + names[0] : null;
+            }, null);
+            Check(report, "Mixed reality", () =>
+            {
+                return "passthrough " + (OpenBrushFacade.PassthroughSupported ? "supported" : "not supported on this device");
+            }, null);
+            Check(report, "Online", () =>
+            {
+                // Informational: online play being unavailable is not a bug in the hooks.
+                return TwOnlineAvailability.MissingPiece() ?? "Photon SDK and app ids are in place";
+            }, null);
+
             // Drawing round trip: draw, save as bytes, wipe, then show the bytes on a stage.
             byte[] saved = null;
             Check(report, "Wipe canvas", () =>
