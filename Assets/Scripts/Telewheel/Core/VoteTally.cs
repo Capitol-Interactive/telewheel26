@@ -85,6 +85,11 @@ namespace Telewheel
             return true;
         }
 
+        public bool HasCast(int voter)
+        {
+            return voter >= 0 && voter < Voters && m_Cast[voter];
+        }
+
         /// <summary>Strict majority of all voters (not just those who voted) said yes.</summary>
         public bool Landed
         {

@@ -47,6 +47,9 @@ namespace Telewheel
 
         private const int MaxMessagesPerPump = 10000;
 
+        /// <summary>A drawing bigger than this is treated as blank, so one player cannot flood the others.</summary>
+        public const int MaxDrawingBytes = 4 * 1024 * 1024;
+
         private readonly MatchSettings m_Settings;
         private readonly WordDeck m_Deck;
         private readonly List<string> m_Names = new List<string>();
@@ -240,16 +243,18 @@ namespace Telewheel
                     }
                     break;
                 case NetKind.Ready:
-                    if (m_Phase == OnlinePhase.Spin && m_Spun[from])
+                    if (m_Phase == OnlinePhase.Spin && m_Spun[from] && !m_Ready[from])
                     {
                         m_Ready[from] = true;
+                        SendProgress(m_Ready);
                         CheckSpinDone();
                     }
                     break;
                 case NetKind.SubmitDrawing:
                     if (m_Phase == OnlinePhase.Turn && m_Planner.KindOfTurn(m_Turn) == StageKind.Draw)
                     {
-                        Submit(from, message.Data ?? new byte[0], null);
+                        byte[] drawing = message.Data ?? new byte[0];
+                        Submit(from, drawing.Length > MaxDrawingBytes ? new byte[0] : drawing, null);
                     }
                     break;
                 case NetKind.SubmitGuess:
@@ -263,6 +268,7 @@ namespace Telewheel
                     if (m_Phase == OnlinePhase.Vote)
                     {
                         m_Tally.Cast(from, message.A != 0);
+                        SendVoteProgress();
                         if (m_Tally.Complete)
                         {
                             ResolveVote();
@@ -361,6 +367,7 @@ namespace Telewheel
                 return;
             }
             m_Submitted[player] = true;
+            SendProgress(m_Submitted);
             int chain = m_Planner.ChainForTurn(player, m_Turn);
             m_Chains[chain].Entries.Add(new ChainEntry
             {
@@ -587,6 +594,30 @@ namespace Telewheel
                     ResolveVote();
                 }
             }
+        }
+
+        // Tells everyone who has finished the current step, so the others can see who they wait for.
+        private void SendProgress(bool[] done)
+        {
+            int mask = 0;
+            for (int p = 0; p < done.Length && p < 31; p++)
+            {
+                if (done[p])
+                {
+                    mask |= 1 << p;
+                }
+            }
+            SendTo(Everyone, NetMessage.Progress(mask));
+        }
+
+        private void SendVoteProgress()
+        {
+            var done = new bool[m_Names.Count];
+            for (int p = 0; p < done.Length; p++)
+            {
+                done[p] = m_Tally.HasCast(p);
+            }
+            SendProgress(done);
         }
 
         private void SetPhase(OnlinePhase phase)

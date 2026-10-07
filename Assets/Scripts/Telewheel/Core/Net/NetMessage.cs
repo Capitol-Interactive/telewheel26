@@ -27,6 +27,9 @@ namespace Telewheel
         Vote = 5,
         Advance = 6,
 
+        /// <summary>First message a player sends: who they are. Everything else waits for the welcome.</summary>
+        Hello = 7,
+
         // Host to players.
         PhaseChanged = 20,
         WheelWords = 21,
@@ -36,6 +39,27 @@ namespace Telewheel
         VoteResult = 25,
         RoundEnd = 26,
         GameEnd = 27,
+        LobbyState = 28,
+        Rejected = 29,
+        PlayerLeft = 30,
+        Environment = 31,
+        Progress = 32,
+        MatchEnded = 33,
+    }
+
+    /// <summary>Why the host turned a player away.</summary>
+    public enum RejectReason
+    {
+        RoomFull = 0,
+        MatchStarted = 1,
+        WrongVersion = 2,
+    }
+
+    /// <summary>Why a match stopped before its last round.</summary>
+    public enum EndReason
+    {
+        HostEnded = 0,
+        NotEnoughPlayers = 1,
     }
 
     /// <summary>
@@ -169,6 +193,61 @@ namespace Telewheel
         public static NetMessage GameEnd(int[] scores)
         {
             return new NetMessage { Kind = NetKind.GameEnd, Numbers = scores };
+        }
+
+        /// <summary>
+        /// The room as <paramref name="yourSeat"/> sees it. Seats are positions in
+        /// <paramref name="names"/>; the host is always seat 0.
+        /// </summary>
+        public static NetMessage LobbyState(
+            int yourSeat, int rounds, ContentFilter filter, string[] names, int[] icons, string environment)
+        {
+            return new NetMessage
+            {
+                Kind = NetKind.LobbyState,
+                A = yourSeat,
+                B = rounds,
+                C = (int)filter,
+                Words = names,
+                Numbers = icons,
+                Text = environment,
+            };
+        }
+
+        public static NetMessage Rejected(RejectReason reason)
+        {
+            return new NetMessage { Kind = NetKind.Rejected, A = (int)reason };
+        }
+
+        /// <summary>A player left mid-match; the host is playing their turns now.</summary>
+        public static NetMessage PlayerLeft(int seat)
+        {
+            return new NetMessage { Kind = NetKind.PlayerLeft, A = seat };
+        }
+
+        /// <summary>The host picked the environment everyone should see (VR only).</summary>
+        public static NetMessage Environment(string id)
+        {
+            return new NetMessage { Kind = NetKind.Environment, Text = id };
+        }
+
+        /// <summary>Who has finished the current step, one bit per seat (for the "waiting for" list).</summary>
+        public static NetMessage Progress(int doneMask)
+        {
+            return new NetMessage { Kind = NetKind.Progress, A = doneMask };
+        }
+
+        public static NetMessage MatchEnded(EndReason reason)
+        {
+            return new NetMessage { Kind = NetKind.MatchEnded, A = (int)reason };
+        }
+
+        // ----- Player to host (continued) -----
+
+        /// <summary>Introduces a player to the room. <paramref name="version"/> is the protocol version.</summary>
+        public static NetMessage Hello(string name, int icon, int version)
+        {
+            return new NetMessage { Kind = NetKind.Hello, Text = name, A = icon, B = version };
         }
     }
 
