@@ -68,7 +68,7 @@ Telewheel is a VR telephone-Pictionary party game (spin a wheel for a word, draw
 - In the editor without a headset use desktop mode (`--Flags.EnableMonoscopicMode true`, or hold M while pressing Play). The on-screen overlay shows the game state and self-test; F8 re-runs the self-test, F9 hides the overlay, F10 opens the system menu. The self-test report is also written to `telewheel-selftest.txt` in the persistent data path and served by the HTTP API (`telewheel.state`, `telewheel.selftest.report`).
 - `--Telewheel.AutoPlay true --Telewheel.TimeScale 10 --Telewheel.Players 4 --Telewheel.Rounds 1` makes bots play a whole match unattended.
 - Word lists are `Assets/Resources/Telewheel/words_*.txt` (the raunchy list is a placeholder). Voice-over clips dropped into `Resources/Telewheel/Audio` as `vo_get_ready`, `vo_spin`, `vo_guess`, `vo_vote`, `vo_nailed`, `vo_drifted`, `vo_round_over`, `vo_game_over` play automatically.
-- Online play (lobbies, Photon) is not built; the "Play Online" button is disabled.
+- Online play: the host-side rules are built and unit-tested in `Core/Net` (`OnlineMatchHost` runs simultaneous turns, `NetMessage`/`NetCodec` are the wire protocol; there is no networking in them). The Photon Fusion transport, lobbies and the Telewheel client screens are not built, so the "Play Online" button is still disabled. The Photon app IDs go in the git-ignored `Secrets` asset (`PhotonFusion` and `PhotonVoice` entries, `ClientId` field), never in git.
 
 ## Project rules (from AGENTS.md)
 

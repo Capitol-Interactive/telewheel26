@@ -49,6 +49,13 @@ namespace Telewheel
         public float PresentFinalSeconds = 30f;
         public float VoteResultSeconds = 4f;
 
+        // Online play only (everyone plays at once, so the host needs a few extra timings).
+        public float SpinSeconds = 40f;
+        public float RoundEndSeconds = 8f;
+
+        /// <summary>Extra time after a turn's clock for the drawing to reach the host.</summary>
+        public float TurnGraceSeconds = 3f;
+
         /// <summary>Optional display names; missing entries fall back to "Player N".</summary>
         public string[] PlayerNames = new string[0];
 
@@ -84,7 +91,8 @@ namespace Telewheel
                 throw new ArgumentException("WheelSegments must be at least 2");
             }
             if (DrawSeconds <= 0 || GuessSeconds <= 0 || CountdownSeconds < 0
-                || PresentItemSeconds <= 0 || PresentFinalSeconds <= 0 || VoteResultSeconds < 0)
+                || PresentItemSeconds <= 0 || PresentFinalSeconds <= 0 || VoteResultSeconds < 0
+                || SpinSeconds <= 0 || RoundEndSeconds < 0 || TurnGraceSeconds < 0)
             {
                 throw new ArgumentException("Durations must be positive");
             }
