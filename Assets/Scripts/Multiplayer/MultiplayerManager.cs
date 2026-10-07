@@ -52,6 +52,10 @@ namespace OpenBrush.Multiplayer
         // Telewheel: messages from the other players, for the game on top. (player id, bytes)
         public Action<int, byte[]> customDataReceived;
 
+        // Telewheel: pin Photon to one region (e.g. "eu") for both the room and voice, so two players
+        // cannot each end up creating a room of the same name in different regions. Empty = best ping.
+        public string Region = "";
+
         // Telewheel: the player's icon number (0 up), or -1 for none. It travels in the unused
         // OculusPlayerId field (as number + 1, so 0 still means "no icon") and the others' avatars
         // are tinted by AvatarIconColor, which the game provides.

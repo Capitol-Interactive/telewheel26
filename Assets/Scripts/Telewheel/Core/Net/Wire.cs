@@ -36,6 +36,13 @@ namespace Telewheel
         private readonly Dictionary<int, uint> m_SendSequence = new Dictionary<int, uint>();
         private readonly Dictionary<int, SequenceBuffer<WireFrame>> m_Receive =
             new Dictionary<int, SequenceBuffer<WireFrame>>();
+        private readonly Dictionary<int, Greeting> m_Unanswered = new Dictionary<int, Greeting>();
+
+        /// <summary>How long to wait for a new arrival to answer before greeting them again.</summary>
+        public const float RegreetSeconds = 2f;
+
+        /// <summary>How many more times to greet an arrival who never answers.</summary>
+        public const int MaxRegreets = 5;
 
         public WireHost(IByteLink link)
         {
@@ -52,6 +59,47 @@ namespace Telewheel
         public void SendToPeer(int peer, NetMessage message)
         {
             Send(peer, Envelope.KindMessage, NetCodec.Encode(message));
+        }
+
+        /// <summary>
+        /// Greets again anyone who arrived but has not answered. A transport may drop the first greeting if
+        /// the newcomer was not quite ready for it, and without it they would wait for ever.
+        /// </summary>
+        public void Tick(float dt)
+        {
+            List<int> due = null;
+            foreach (KeyValuePair<int, Greeting> entry in m_Unanswered)
+            {
+                entry.Value.Waited += dt;
+                if (entry.Value.Waited >= RegreetSeconds)
+                {
+                    if (due == null)
+                    {
+                        due = new List<int>();
+                    }
+                    due.Add(entry.Key);
+                }
+            }
+            if (due == null)
+            {
+                return;
+            }
+            foreach (int peer in due)
+            {
+                Greeting greeting = m_Unanswered[peer];
+                greeting.Waited = 0f;
+                greeting.Repeats++;
+                if (greeting.Repeats > MaxRegreets)
+                {
+                    m_Unanswered.Remove(peer);
+                }
+                else
+                {
+                    // The very same frame, with the same sequence number: if the first one did arrive this
+                    // is a repeat that gets dropped, and if it did not, the gap is filled.
+                    m_Link.Send(peer, greeting.Frame);
+                }
+            }
         }
 
         public void Dispose()
@@ -74,13 +122,17 @@ namespace Telewheel
             // A fresh start for this id, which the transport may have used before.
             m_SendSequence.Remove(peer);
             m_Receive.Remove(peer);
-            Send(peer, Envelope.KindHostHello, null);
+            var greeting = new Greeting { Frame = Envelope.Pack(Envelope.KindHostHello, 0u, null) };
+            m_SendSequence[peer] = 1u; // The greeting is number 0 in this peer's sequence.
+            m_Unanswered[peer] = greeting;
+            m_Link.Send(peer, greeting.Frame);
         }
 
         private void OnPeerLeft(int peer)
         {
             m_SendSequence.Remove(peer);
             m_Receive.Remove(peer);
+            m_Unanswered.Remove(peer);
             Action<int> handler = PeerLeft;
             if (handler != null)
             {
@@ -97,6 +149,7 @@ namespace Telewheel
             {
                 return;
             }
+            m_Unanswered.Remove(peer); // They have heard us: no need to greet again.
             SequenceBuffer<WireFrame> buffer;
             if (!m_Receive.TryGetValue(peer, out buffer))
             {
@@ -112,6 +165,13 @@ namespace Telewheel
                     handler(peer, message);
                 }
             }
+        }
+
+        private sealed class Greeting
+        {
+            public byte[] Frame;
+            public float Waited;
+            public int Repeats;
         }
 
         internal static NetMessage Decode(byte[] payload)

@@ -93,24 +93,34 @@ namespace Telewheel
     public static class TwOnline
     {
         private static ITwOnlineBackend s_Backend;
+        private static ITwOnlineBackend s_Photon;
 
         // Domain reload is off in this project, so forget the backend when Play starts.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
             s_Backend = null;
+            s_Photon = null;
         }
 
         /// <summary>
-        /// The real backend. Until one is set (the Photon transport), online play says why it cannot
-        /// run: no SDK in the build, an app id missing from the Secrets asset, or not connected yet.
+        /// The backend for real online play: Photon when its pieces are in place (the SDK in the build and
+        /// both app ids in the Secrets asset), otherwise one that says what is missing.
         /// </summary>
         public static ITwOnlineBackend Backend
         {
             get
             {
-                return s_Backend ?? new TwUnavailableBackend(
-                    TwOnlineAvailability.MissingPiece() ?? TwCopy.OnlineNotBuilt);
+                if (s_Backend != null)
+                {
+                    return s_Backend;
+                }
+                string missing = TwOnlineAvailability.MissingPiece();
+                if (missing != null)
+                {
+                    return new TwUnavailableBackend(missing);
+                }
+                return s_Photon ?? (s_Photon = new TwPhotonBackend());
             }
             set { s_Backend = value; }
         }

@@ -122,7 +122,14 @@ namespace Telewheel
         public const string OnlineNoVoiceId = "The Photon Voice app id is missing from the Secrets asset.";
         public const string OnlineNoManager = "Online play is still starting up. Try again in a moment.";
         public const string OnlineError = "Online play hit a problem. Restart the game and try again.";
-        public const string OnlineNotBuilt = "Online play over Photon is not connected to Telewheel yet.";
+        public const string OnlineBusy = "Online play is busy. Try again in a moment.";
+        public const string NoSuchRoom = "No room with that code. Check the code, and that you are both online.";
+        public const string CouldNotConnect = "Couldn't reach the online service. Check your connection and try again.";
+        public const string NoFreeCode = "Couldn't find a free room code. Try again.";
+        public const string MicOn = "MIC: ON";
+        public const string MicOff = "MIC: OFF";
+        public const string OthersHeard = "OTHERS: HEARD";
+        public const string OthersMuted = "OTHERS: MUTED";
         public const string MixedRealityStuck = "Can't leave mixed reality while other players are in the room.";
         public const string EnvironmentLabel = "ENVIRONMENT";
         public const string DefaultEnvironment = "DEFAULT";
@@ -179,9 +186,15 @@ namespace Telewheel
 
         public static string EndedLine(EndReason reason)
         {
-            return reason == EndReason.NotEnoughPlayers
-                ? "Not enough players are left to carry on."
-                : "The host left, so the match ended.";
+            switch (reason)
+            {
+                case EndReason.NotEnoughPlayers:
+                    return "Not enough players are left to carry on.";
+                case EndReason.ConnectionLost:
+                    return "You lost your connection to the room.";
+                default:
+                    return "The host left, so the match ended.";
+            }
         }
 
         public static string PassTo(string playerName)

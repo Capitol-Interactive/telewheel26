@@ -67,6 +67,10 @@ namespace Telewheel.PhotonCheck
             };
         }
 
+        // Not checked here: PhotonManager.Connect and JoinRoom assign FixedRegion on the app settings. That
+        // member comes from Photon.Realtime.AppSettings, which Unity builds from source and this project does
+        // not; the original code already sets it in an object initializer, so a plain assignment is the same.
+
         // The room list: PhotonManager.OnSessionListUpdated.
         public static bool Listed(SessionInfo session)
         {

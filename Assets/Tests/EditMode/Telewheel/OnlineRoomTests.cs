@@ -724,6 +724,41 @@ namespace Telewheel.Tests
             Assert.AreEqual(3, room.Members.Count);
         }
 
+        // ----- Lost connections and the start of the match -----
+
+        [Test]
+        public void ALostConnectionEndsTheMatchOnThatDevice()
+        {
+            var rig = new Rig().WithPlayers(3);
+            rig.Begin();
+            rig.Bots[0].Client.ConnectionLost();
+            Assert.AreEqual(ClientState.Ended, rig.Bots[0].Client.State);
+            Assert.AreEqual(EndReason.ConnectionLost, rig.Bots[0].Client.EndedBecause);
+            StringAssert.Contains("lost your connection", TwCopy.EndedLine(EndReason.ConnectionLost));
+        }
+
+        [Test]
+        public void ARoomClosedForALostConnectionTellsTheHostsOwnPlayerWhy()
+        {
+            var rig = new Rig().WithPlayers(2);
+            rig.Room.Close(EndReason.ConnectionLost);
+            rig.Step(0f);
+            Assert.AreEqual(EndReason.ConnectionLost, rig.HostBot.Client.EndedBecause);
+        }
+
+        [Test]
+        public void TheRoomSaysOnceWhenTheMatchStarts()
+        {
+            var rig = new Rig().WithPlayers(3);
+            int started = 0;
+            rig.Room.Started += () => started++;
+            Assert.AreEqual(0, started);
+            rig.Begin();
+            Assert.AreEqual(1, started);
+            Assert.IsFalse(rig.Room.Start(), "a second start is refused and says nothing");
+            Assert.AreEqual(1, started);
+        }
+
         // ----- Waiting for others -----
 
         [Test]

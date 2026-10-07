@@ -243,6 +243,12 @@ namespace Telewheel.Tests
 
             public int Id { get; private set; }
 
+            /// <summary>Frames this node will silently lose before it sends normally (a transport dropping early data).</summary>
+            public int DropOutgoing { get; set; }
+
+            /// <summary>How many frames this node has sent in all, lost ones included.</summary>
+            public int SentCount { get; private set; }
+
             public event Action<int, byte[]> Received;
 
             public event Action<int> PeerJoined;
@@ -256,6 +262,12 @@ namespace Telewheel.Tests
 
             public void Send(int peer, byte[] bytes)
             {
+                SentCount++;
+                if (DropOutgoing > 0)
+                {
+                    DropOutgoing--;
+                    return;
+                }
                 Node target;
                 if (m_Peers.TryGetValue(peer, out target))
                 {
@@ -295,6 +307,7 @@ namespace Telewheel.Tests
         {
             public readonly ShufflingNet Net;
             public readonly Node HostNode;
+            public readonly WireHost Wire;
             public readonly OnlineRoomHost Room;
             public readonly List<OnlineBot> Bots = new List<OnlineBot>();
             public readonly List<Node> Nodes = new List<Node>();
@@ -309,8 +322,9 @@ namespace Telewheel.Tests
                 {
                     words.Add("word" + i);
                 }
+                Wire = new WireHost(HostNode);
                 Room = new OnlineRoomHost(
-                    new WireHost(HostNode), new MatchSettings { Rounds = 1, Seed = seed },
+                    Wire, new MatchSettings { Rounds = 1, Seed = seed },
                     new PlayerProfile("Host", 0), filter => words);
                 var hostBot = new OnlineBot(Room.LocalPort, new PlayerProfile("Host", 0), seed, DrawingFor(0));
                 hostBot.Join();
@@ -347,6 +361,7 @@ namespace Telewheel.Tests
             public void Step(float dt)
             {
                 Net.Deliver();
+                Wire.Tick(dt);
                 Room.Tick(dt);
                 foreach (OnlineBot bot in Bots)
                 {
@@ -440,6 +455,40 @@ namespace Telewheel.Tests
             room.Step(0f);
             Assert.AreEqual(before, room.Bots[1].Client.LobbyVersion);
             Assert.AreNotEqual(5, room.Bots[1].Client.RoundCount);
+        }
+
+        [Test]
+        public void AGreetingThatWasLostIsSentAgain()
+        {
+            var room = new WireRoom(1, 21); // Just the host.
+            room.HostNode.DropOutgoing = 1; // The first greeting vanishes, as if the newcomer was not ready.
+            room.AddGuest(1, 21);
+            room.Step(0f);
+            Assert.AreEqual(-1, room.Clients[0].HostPeer, "the guest has not heard from the host yet");
+            Assert.IsTrue(room.RunUntil(() => room.Clients[0].HostPeer == 100, 10f), "the host should greet again");
+            Assert.IsTrue(room.RunUntil(() => room.Bots[1].Client.State == ClientState.Lobby, 10f));
+        }
+
+        [Test]
+        public void AGuestWhoNeverAnswersIsOnlyGreetedAFewTimes()
+        {
+            var room = new WireRoom(1, 22);
+            room.HostNode.DropOutgoing = int.MaxValue; // Nothing the host sends gets through.
+            room.AddGuest(1, 22);
+            room.RunUntil(() => false, 120f);
+            Assert.AreEqual(1 + WireHost.MaxRegreets, room.HostNode.SentCount - 0,
+                "one greeting and then a limited number of repeats");
+        }
+
+        [Test]
+        public void AGuestWhoHasAnsweredIsNotGreetedAgain()
+        {
+            var room = new WireRoom(2, 23);
+            room.RunUntil(() => room.Bots[1].Client.State == ClientState.Lobby, 10f);
+            int sentAtStart = room.HostNode.SentCount;
+            room.RunUntil(() => false, 30f);
+            // Only the lobby messages go out now (none, since nothing changes): no repeated greetings.
+            Assert.AreEqual(sentAtStart, room.HostNode.SentCount);
         }
 
         [Test]

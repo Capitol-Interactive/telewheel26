@@ -72,6 +72,9 @@ namespace Telewheel
     {
         HostEnded = 0,
         NotEnoughPlayers = 1,
+
+        /// <summary>This device lost its connection to the room (not necessarily because the host left).</summary>
+        ConnectionLost = 2,
     }
 
     /// <summary>

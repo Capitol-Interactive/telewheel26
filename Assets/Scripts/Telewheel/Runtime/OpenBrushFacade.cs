@@ -28,7 +28,7 @@ namespace Telewheel
     /// The only place Telewheel touches Open Brush internals. Everything else in Telewheel goes
     /// through here, so an Open Brush change only ever breaks this one file.
     /// </summary>
-    public static class OpenBrushFacade
+    public static partial class OpenBrushFacade
     {
         /// <summary>The plain Marker brush, used for every drawing so they all look alike.</summary>
         public static readonly Guid MarkerBrushGuid = new Guid("429ed64a-4e97-4466-84d3-145a861ef684");
@@ -122,6 +122,7 @@ namespace Telewheel
             PanelManager.m_Instance.SetTelewheelMode(true);
             SketchControlsScript.m_Instance.m_DisableWorldGrabbing = true;
             SelectMarkerBrush();
+            DisableOpenBrushMultiplayerUi();
         }
 
         public static void ExitGameMode()

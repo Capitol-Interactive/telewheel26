@@ -463,6 +463,15 @@ namespace TiltBrush
                 set { m_FakeOnline = value; }
             }
 
+            string m_Region;
+            // Pins online play to one Photon region (for example "eu" or "us") so friends cannot end up in
+            // different regions. Empty picks the best one by ping.
+            public string Region
+            {
+                get { return m_Region ?? string.Empty; }
+                set { m_Region = value; }
+            }
+
             bool? m_DebugOverlay;
             // The on-screen debug panel with the game state and self-test results.
             // On by default in the editor and development builds, off in release builds.

@@ -81,11 +81,50 @@ namespace OpenBrush.Multiplayer
         IN_LOBBY, JOINING_ROOM, IN_ROOM, RECONNECTING, ERROR, LEAVING_ROOM,
     }
 
+    public struct ConnectionUserInfo { public string UserId; public string Nickname; public string Role; }
+
+    public struct RoomCreateData
+    {
+        public string roomName;
+        public string roomPassword;
+        public bool @private;
+        public int maxPlayers;
+        public bool silentRoom;
+        public bool viewOnlyRoom;
+    }
+
+    public class RemotePlayer { public int PlayerId; public bool m_IsMutedForMe; }
+
+    public class RemotePlayers { public List<RemotePlayer> List { get { return null; } } }
+
     public class MultiplayerManager
     {
         public static MultiplayerManager m_Instance { get { return null; } }
+        public static Func<int, Color> AvatarIconColor;
         public ConnectionState State { get { return ConnectionState.INITIALIZED; } }
+        public string LastError { get { return null; } }
+        public ConnectionUserInfo UserInfo { get; set; }
+        public int LocalPlayerId { get { return -1; } }
+        public RemotePlayers m_RemotePlayers;
+        public bool SuppressCommandSharing;
+        public bool VoiceIsOptional;
+        public bool StartMicrophoneOnJoin;
+        public int AvatarIconIndex;
+        public string Region;
+        public Action<int, byte[]> customDataReceived;
+        public Action<int> playerLeft;
+        public event Action<ConnectionState> StateUpdated;
         public bool IsConnectable() { return true; }
+        public System.Threading.Tasks.Task<bool> Connect() { return null; }
+        public System.Threading.Tasks.Task<bool> JoinRoom(RoomCreateData data) { return null; }
+        public System.Threading.Tasks.Task<bool> LeaveRoom(bool force = false) { return null; }
+        public bool SendCustomData(int playerId, byte[] data) { return false; }
+        public IList<int> GetRemotePlayerIds() { return null; }
+        public void SetRoomOpen(bool open) { }
+        public void StartSpeaking() { }
+        public void StopSpeaking() { }
+        public void MutePlayerForMe(bool muted, int playerId) { }
+        public void SetRemoteAvatarsVisible(bool visible) { }
     }
 }
 
@@ -126,6 +165,7 @@ namespace TiltBrush
             public int Seed { get; set; }
             public bool DebugOverlay { get; set; }
             public bool FakeOnline { get; set; }
+            public string Region { get; set; }
         }
         public TelewheelConfig Telewheel;
     }
@@ -295,3 +335,5 @@ public class SecretsConfig : ScriptableObject
 
     public ServiceAuthData[] Secrets;
 }
+
+public class NonVrMultiplayerUi : MonoBehaviour { }

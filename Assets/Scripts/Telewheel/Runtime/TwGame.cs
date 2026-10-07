@@ -54,6 +54,7 @@ namespace Telewheel
         private bool m_TitleConfettiShown;
         private bool m_WaitingShown;
         private bool m_HostEnvironmentApplied;
+        private float m_RoomExtrasTimer;
 
         public TwGame(TwDirector director, TwSketchService sketch, TwPointer pointer, int seed)
         {
@@ -150,7 +151,48 @@ namespace Telewheel
             }
             bool inMatch = m_Session != null || m_Online != null;
             m_Overlay = new TwSystemMenuScreen(
-                inMatch, IsDrawTurn, OpenPreferencesFromMenu, TakePhoto, ExitMatchFromMenu, CloseSystemMenu);
+                inMatch, IsDrawTurn, OpenPreferencesFromMenu, TakePhoto, ExitMatchFromMenu, CloseSystemMenu,
+                InRealRoom ? VoiceMenuOptions() : null);
+        }
+
+        // True in a room over the real network (not the practice room, which has no voice or avatars).
+        private bool InRealRoom
+        {
+            get { return m_Online != null && !m_Online.IsPractice; }
+        }
+
+        private static TwVoiceOptions VoiceMenuOptions()
+        {
+            return new TwVoiceOptions
+            {
+                MicOn = () => TwPrefs.VoiceEnabled,
+                ToggleMic = () => TwPrefs.SetVoiceEnabled(!TwPrefs.VoiceEnabled),
+                OthersMuted = () => TwPrefs.MuteOthers,
+                ToggleOthers = () => TwPrefs.SetMuteOthers(!TwPrefs.MuteOthers),
+            };
+        }
+
+        // The other players stand in the same place while everyone draws, so their avatars are hidden
+        // for those turns. Avatars also spawn late, and voice joins late, so this repeats.
+        private void UpdateRoomExtras(float dt)
+        {
+            if (!InRealRoom || m_Session == null)
+            {
+                return;
+            }
+            m_RoomExtrasTimer -= dt;
+            if (m_RoomExtrasTimer > 0f)
+            {
+                return;
+            }
+            m_RoomExtrasTimer = 0.5f;
+            MatchPhase phase = m_Session.Phase;
+            bool working = phase == MatchPhase.Spin || phase == MatchPhase.Countdown || phase == MatchPhase.Turn;
+            OpenBrushFacade.SetRemoteAvatarsVisible(!working);
+            if (TwPrefs.MuteOthers)
+            {
+                OpenBrushFacade.MuteOtherPlayers(true);
+            }
         }
 
         private void CloseSystemMenu()
@@ -558,6 +600,7 @@ namespace Telewheel
                 }
                 PlayClockSounds();
                 ShowWaitingWhenDone();
+                UpdateRoomExtras(dt);
             }
             if (m_Screen != null)
             {

@@ -164,6 +164,12 @@ namespace Telewheel
             return m_Gone.Contains(seat);
         }
 
+        /// <summary>The transport lost the connection to the room (as opposed to the host leaving). Ends the match here.</summary>
+        public void ConnectionLost()
+        {
+            End(EndReason.ConnectionLost);
+        }
+
         /// <summary>Introduces this player to the room. Call once the connection is up.</summary>
         public void Join()
         {

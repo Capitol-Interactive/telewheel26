@@ -23,6 +23,8 @@ namespace Telewheel
         private const string RightHandedKey = "telewheel.rightHanded";
         private const string PlayerNameKey = "telewheel.playerName";
         private const string PlayerIconKey = "telewheel.playerIcon";
+        private const string VoiceKey = "telewheel.voice";
+        private const string MuteOthersKey = "telewheel.muteOthers";
 
         /// <summary>Show passthrough instead of a virtual environment (when the device supports it).</summary>
         public static bool MixedReality
@@ -36,6 +38,34 @@ namespace Telewheel
         {
             get { return PlayerPrefs.GetInt(RightHandedKey, 1) == 1; }
             set { PlayerPrefs.SetInt(RightHandedKey, value ? 1 : 0); }
+        }
+
+        /// <summary>Whether your microphone is open in online rooms.</summary>
+        public static bool VoiceEnabled
+        {
+            get { return PlayerPrefs.GetInt(VoiceKey, 1) == 1; }
+            set { PlayerPrefs.SetInt(VoiceKey, value ? 1 : 0); }
+        }
+
+        /// <summary>Whether you hear the other players in online rooms.</summary>
+        public static bool MuteOthers
+        {
+            get { return PlayerPrefs.GetInt(MuteOthersKey, 0) == 1; }
+            set { PlayerPrefs.SetInt(MuteOthersKey, value ? 1 : 0); }
+        }
+
+        public static void SetVoiceEnabled(bool on)
+        {
+            VoiceEnabled = on;
+            PlayerPrefs.Save();
+            OpenBrushFacade.SetMicrophone(on);
+        }
+
+        public static void SetMuteOthers(bool muted)
+        {
+            MuteOthers = muted;
+            PlayerPrefs.Save();
+            OpenBrushFacade.MuteOtherPlayers(muted);
         }
 
         /// <summary>The name and icon shown to other players online.</summary>

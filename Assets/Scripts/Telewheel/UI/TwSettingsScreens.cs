@@ -68,6 +68,15 @@ namespace Telewheel
         }
     }
 
+    /// <summary>What the system menu needs to show and change voice chat in an online room.</summary>
+    public sealed class TwVoiceOptions
+    {
+        public Func<bool> MicOn;
+        public Action ToggleMic;
+        public Func<bool> OthersMuted;
+        public Action ToggleOthers;
+    }
+
     /// <summary>
     /// The always-available system menu (opened from the hand menu's settings button, the MENU
     /// button, or F10): exit the match, preferences and photo mode, and the online features that
@@ -75,8 +84,14 @@ namespace Telewheel
     /// </summary>
     public sealed class TwSystemMenuScreen : TwScreen
     {
+        private readonly TwVoiceOptions m_Voice;
+        private TwButton m_Mic;
+        private TwButton m_Others;
+
+        /// <param name="voice">Voice chat controls for an online room; null shows the placeholders instead.</param>
         public TwSystemMenuScreen(
-            bool inMatch, bool canPhoto, Action onPreferences, Action onPhoto, Action onExit, Action onClose)
+            bool inMatch, bool canPhoto, Action onPreferences, Action onPhoto, Action onExit, Action onClose,
+            TwVoiceOptions voice = null)
             : base("System menu", 1.2f, 0f)
         {
             Backdrop(0.8f, 1.0f);
@@ -84,13 +99,37 @@ namespace Telewheel
             Button(TwCopy.Settings, 0f, 0.24f, 0.6f, 0.1f, TwButton.Style.Secondary, onPreferences);
             TwButton photo = Button(TwCopy.Photo, 0f, 0.1f, 0.6f, 0.1f, TwButton.Style.Secondary, onPhoto);
             photo.SetInteractable(canPhoto);
-            TwButton invite = Button(TwCopy.Invite, 0f, -0.04f, 0.6f, 0.1f, TwButton.Style.Secondary, null);
-            invite.SetInteractable(false);
-            TwButton friends = Button(TwCopy.OnlineFriends, 0f, -0.18f, 0.6f, 0.1f, TwButton.Style.Secondary, null);
-            friends.SetInteractable(false);
+            m_Voice = voice;
+            if (voice != null)
+            {
+                m_Mic = Button(string.Empty, 0f, -0.04f, 0.6f, 0.1f, TwButton.Style.Secondary, () =>
+                {
+                    m_Voice.ToggleMic();
+                    RefreshVoice();
+                });
+                m_Others = Button(string.Empty, 0f, -0.18f, 0.6f, 0.1f, TwButton.Style.Secondary, () =>
+                {
+                    m_Voice.ToggleOthers();
+                    RefreshVoice();
+                });
+                RefreshVoice();
+            }
+            else
+            {
+                TwButton invite = Button(TwCopy.Invite, 0f, -0.04f, 0.6f, 0.1f, TwButton.Style.Secondary, null);
+                invite.SetInteractable(false);
+                TwButton friends = Button(TwCopy.OnlineFriends, 0f, -0.18f, 0.6f, 0.1f, TwButton.Style.Secondary, null);
+                friends.SetInteractable(false);
+            }
             TwButton exit = Button(TwCopy.ExitMatch, 0f, -0.33f, 0.6f, 0.1f, TwButton.Style.Negative, onExit);
             exit.SetInteractable(inMatch);
             Button("Close", 0f, -0.45f, 0.3f, 0.07f, TwButton.Style.Ghost, onClose);
+        }
+
+        private void RefreshVoice()
+        {
+            m_Mic.SetLabel(m_Voice.MicOn() ? TwCopy.MicOn : TwCopy.MicOff);
+            m_Others.SetLabel(m_Voice.OthersMuted() ? TwCopy.OthersMuted : TwCopy.OthersHeard);
         }
     }
 }

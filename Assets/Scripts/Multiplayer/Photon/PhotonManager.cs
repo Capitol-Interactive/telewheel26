@@ -130,6 +130,7 @@ namespace OpenBrush.Multiplayer
 
             // Telewheel: Disconnect destroys the runner, so build a new one before reconnecting.
             if (m_Runner == null) Init();
+            m_PhotonAppSettings.FixedRegion = m_Manager.Region ?? ""; // Telewheel
 
             await Task.Yield();
 
@@ -156,6 +157,7 @@ namespace OpenBrush.Multiplayer
         {
 
             if (m_Runner == null) Init();
+            m_PhotonAppSettings.FixedRegion = m_Manager.Region ?? ""; // Telewheel
 
             State = ConnectionState.JOINING_ROOM;
 

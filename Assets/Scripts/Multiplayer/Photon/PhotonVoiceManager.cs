@@ -114,6 +114,7 @@ public class PhotonVoiceManager : IVoiceConnectionHandler, IConnectionCallbacks,
         }
 
         m_VoiceConnection.Client.UserId = m_Manager.UserInfo.UserId;
+        m_VoiceConnection.Settings.FixedRegion = m_Manager.Region ?? ""; // Telewheel
 
         if (!m_VoiceConnection.Client.IsConnected)
         {

@@ -102,6 +102,9 @@ namespace Telewheel
         /// <summary>Raised when someone joins or leaves, or the rules change.</summary>
         public event Action RosterChanged;
 
+        /// <summary>Raised once, when the match starts (the transport can close the room to newcomers).</summary>
+        public event Action Started;
+
         /// <summary>Raised whenever a link test result comes in or the test finishes.</summary>
         public event Action LinkTestChanged;
 
@@ -257,6 +260,11 @@ namespace Telewheel
             }
             m_Match.Send += OnMatchSend;
             m_Match.Start();
+            Action started = Started;
+            if (started != null)
+            {
+                started();
+            }
             return true;
         }
 
