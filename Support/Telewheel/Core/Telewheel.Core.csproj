@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Compiles the Unity-free Telewheel game logic so it can be built and tested outside Unity.
+       The same sources are compiled in Unity by Assets/Scripts/Telewheel/Core/Telewheel.Core.asmdef. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Telewheel</RootNamespace>
+    <AssemblyName>Telewheel.Core</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../../Assets/Scripts/Telewheel/Core/**/*.cs" />
+  </ItemGroup>
+
+</Project>

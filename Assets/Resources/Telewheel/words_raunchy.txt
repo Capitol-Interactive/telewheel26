@@ -1,0 +1,27 @@
+# PLACEHOLDER for the Raunchy (18+) word list. Replace this file with the real list.
+# Same format as words_family.txt. The wheel needs at least 8 words (more is better).
+# These mild stand-ins only exist so the 18+ filter has something to spin.
+plunger
+thong
+banana peel
+whoopee
+jiggle
+cleavage
+cucumber
+love handles
+hot tub
+bikini
+handcuffs
+nightcap
+mooning
+peach
+wiener
+bachelor
+bubble bath
+wet t-shirt
+tramp stamp
+pole dance
+skinny dip
+hot dog
+kiss
+twerk

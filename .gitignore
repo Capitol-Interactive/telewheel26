@@ -103,3 +103,7 @@
 
 # Local planning / analysis notes, not repo content
 /LlmDocs/
+
+# Telewheel: dotnet build output for the Unity-free Core library and its tests
+/Support/Telewheel/*/bin/
+/Support/Telewheel/*/obj/
