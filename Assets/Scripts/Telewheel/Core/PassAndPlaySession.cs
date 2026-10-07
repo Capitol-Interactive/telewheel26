@@ -185,6 +185,11 @@ namespace Telewheel
             m_Machine.ConfirmHandoff();
         }
 
+        public void SkipCountdown()
+        {
+            m_Machine.SkipCountdown();
+        }
+
         public void CompleteSpin(int segment)
         {
             m_Machine.CompleteSpin(segment);

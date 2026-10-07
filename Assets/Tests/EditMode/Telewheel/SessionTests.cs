@@ -88,6 +88,46 @@ namespace Telewheel.Tests
             CollectionAssert.AreEqual(new[] { 0, 1, 2 }, ScoreMath.Leaders(new[] { 0, 0, 0 }).ToArray());
         }
 
+        [Test]
+        public void NamesGetCapitalLettersWithoutLoweringAny()
+        {
+            Assert.AreEqual("Ann Lee", PlayerProfile.Capitalize("ann lee"));
+            Assert.AreEqual("McDonald", PlayerProfile.Capitalize("mcDonald"));
+            Assert.AreEqual("Mary-Jane", PlayerProfile.Capitalize("mary-jane"));
+            Assert.AreEqual(string.Empty, PlayerProfile.Capitalize(null));
+        }
+
+        [Test]
+        public void ThereIsOneColourForEveryIcon()
+        {
+            Assert.AreEqual(PlayerProfile.IconCount, TwTokens.PlayerColors.Length);
+            CollectionAssert.AllItemsAreUnique(TwTokens.PlayerColors);
+        }
+
+        [Test]
+        public void TheWaitingLineNamesWhoIsLeft()
+        {
+            Assert.AreEqual(TwCopy.HereWeGo, TwCopy.WaitingFor(new string[0]));
+            Assert.AreEqual("Waiting for Ann", TwCopy.WaitingFor(new[] { "Ann" }));
+            Assert.AreEqual("Waiting for Ann and Bo", TwCopy.WaitingFor(new[] { "Ann", "Bo" }));
+            Assert.AreEqual("Waiting for Ann, Bo and Cy", TwCopy.WaitingFor(new[] { "Ann", "Bo", "Cy" }));
+            Assert.AreEqual("Waiting for Ann, Bo and 3 more", TwCopy.WaitingFor(new[] { "Ann", "Bo", "Cy", "Di", "Ed" }));
+        }
+
+        [Test]
+        public void EveryRejectionAndEndingHasAMessage()
+        {
+            foreach (RejectReason reason in System.Enum.GetValues(typeof(RejectReason)))
+            {
+                Assert.IsNotEmpty(TwCopy.RejectedLine(reason));
+            }
+            foreach (EndReason reason in System.Enum.GetValues(typeof(EndReason)))
+            {
+                Assert.IsNotEmpty(TwCopy.EndedLine(reason));
+            }
+            StringAssert.Contains("Ann left", TwCopy.PlayerLeftLine("Ann"));
+        }
+
         // ----- Pass & Play through the shared interface -----
 
         private static PassAndPlaySession NewPassAndPlay(int players)

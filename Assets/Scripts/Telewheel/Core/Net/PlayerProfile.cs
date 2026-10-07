@@ -40,6 +40,26 @@ namespace Telewheel
             return clean.Length > MaxNameLength ? clean.Substring(0, MaxNameLength).TrimEnd() : clean;
         }
 
+        /// <summary>Capital letter at the start of each word ("ann lee" becomes "Ann Lee"); never lowers a letter.</summary>
+        public static string Capitalize(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return string.Empty;
+            }
+            char[] letters = name.ToCharArray();
+            bool startOfWord = true;
+            for (int i = 0; i < letters.Length; i++)
+            {
+                if (startOfWord && char.IsLetter(letters[i]))
+                {
+                    letters[i] = char.ToUpperInvariant(letters[i]);
+                }
+                startOfWord = letters[i] == ' ' || letters[i] == '-';
+            }
+            return new string(letters);
+        }
+
         /// <summary>Wraps any number onto the icon palette.</summary>
         public static int CleanIcon(int icon)
         {

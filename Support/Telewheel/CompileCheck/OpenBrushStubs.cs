@@ -107,6 +107,7 @@ namespace TiltBrush
             public int Rounds { get; set; }
             public int Seed { get; set; }
             public bool DebugOverlay { get; set; }
+            public bool FakeOnline { get; set; }
         }
         public TelewheelConfig Telewheel;
     }

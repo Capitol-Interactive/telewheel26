@@ -454,6 +454,15 @@ namespace TiltBrush
                 set { m_Seed = value; }
             }
 
+            bool? m_FakeOnline;
+            // Shows the practice-room buttons in the Play Online menu (computer players, no network).
+            // With AutoPlay the bots play a whole practice online match instead of Pass & Play.
+            public bool FakeOnline
+            {
+                get { return m_FakeOnline ?? false; }
+                set { m_FakeOnline = value; }
+            }
+
             bool? m_DebugOverlay;
             // The on-screen debug panel with the game state and self-test results.
             // On by default in the editor and development builds, off in release builds.

@@ -108,9 +108,9 @@ namespace Telewheel
         }
 
         /// <summary>Names and scores, highest first; the leaders in sun yellow.</summary>
-        protected void Scoreboard(MatchMachine machine, float topY, float rowHeight)
+        protected void Scoreboard(IMatchView view, float topY, float rowHeight)
         {
-            int count = machine.Settings.PlayerCount;
+            int count = view.PlayerCount;
             var order = new System.Collections.Generic.List<int>();
             for (int i = 0; i < count; i++)
             {
@@ -118,18 +118,18 @@ namespace Telewheel
             }
             order.Sort((a, b) =>
             {
-                int byScore = machine.Scores[b].CompareTo(machine.Scores[a]);
+                int byScore = view.Scores[b].CompareTo(view.Scores[a]);
                 return byScore != 0 ? byScore : a.CompareTo(b);
             });
-            System.Collections.Generic.IList<int> leaders = machine.Leaders;
+            System.Collections.Generic.IList<int> leaders = view.Leaders;
             for (int row = 0; row < order.Count; row++)
             {
                 int player = order[row];
                 uint color = leaders.Contains(player) ? TwTokens.Sun : TwTokens.Ink;
                 float y = topY - rowHeight * row;
-                TwUi.Text(T, machine.Settings.NameOf(player), TwUi.Px(TwTokens.Heading), color,
+                TwUi.Text(T, view.NameOf(player), TwUi.Px(TwTokens.Heading), color,
                     TwFonts.Bold, new Vector3(-0.3f, y, 0f), TextAlignmentOptions.Left);
-                TwUi.Text(T, machine.Scores[player].ToString(), TwUi.Px(TwTokens.Heading), color,
+                TwUi.Text(T, view.Scores[player].ToString(), TwUi.Px(TwTokens.Heading), color,
                     TwFonts.Bold, new Vector3(0.3f, y, 0f), TextAlignmentOptions.Right);
             }
         }

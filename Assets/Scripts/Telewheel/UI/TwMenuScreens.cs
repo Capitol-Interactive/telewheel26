@@ -21,20 +21,18 @@ namespace Telewheel
     /// <summary>The title screen: the game's name and the ways in.</summary>
     public sealed class TwMainMenuScreen : TwScreen
     {
-        public TwMainMenuScreen(Action onPassAndPlay, Action onSettings)
+        public TwMainMenuScreen(Action onPassAndPlay, Action onPlayOnline, Action onSettings)
             : base("Main menu", 1.5f, 0f)
         {
             Backdrop(0.95f, 0.95f);
             new TwHeadline(T, TwCopy.Title, TwUi.Px(TwTokens.DisplayXl), new Vector3(0f, 0.3f, 0f));
             Body("Draw it. Pass it. Guess it.", 0.19f);
             Button(TwCopy.PassAndPlay, 0f, 0.05f, 0.64f, 0.12f, TwButton.Style.Primary, onPassAndPlay);
-            TwButton online = Button(TwCopy.PlayOnline, 0f, -0.11f, 0.64f, 0.12f, TwButton.Style.Secondary, null);
-            online.SetInteractable(false);
-            Body(TwCopy.OnlineSoon, -0.2f);
-            Button(TwCopy.Settings, 0f, -0.32f, 0.64f, 0.12f, TwButton.Style.Secondary, onSettings);
+            Button(TwCopy.PlayOnline, 0f, -0.11f, 0.64f, 0.12f, TwButton.Style.Secondary, onPlayOnline);
+            Button(TwCopy.Settings, 0f, -0.27f, 0.64f, 0.12f, TwButton.Style.Secondary, onSettings);
             if (OpenBrushFacade.IsMonoscopic)
             {
-                Body("Desktop: mouse aims, click presses, hold Alt to look around.", -0.43f, 0.85f);
+                Body("Desktop: mouse aims, click presses, hold Alt to look around.", -0.41f, 0.85f);
             }
         }
     }

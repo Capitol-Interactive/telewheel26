@@ -48,6 +48,7 @@ namespace Telewheel
         private readonly List<int> m_Icons = new List<int>();
         private readonly HashSet<int> m_Gone = new HashSet<int>();
 
+        private int m_LobbyVersion;
         private ClientState m_State = ClientState.Connecting;
         private RejectReason m_Rejection;
         private EndReason m_EndedBecause;
@@ -107,6 +108,12 @@ namespace Telewheel
         public ClientState State
         {
             get { return m_State; }
+        }
+
+        /// <summary>Goes up every time the roster or rules change, so a screen can tell it is out of date.</summary>
+        public int LobbyVersion
+        {
+            get { return m_LobbyVersion; }
         }
 
         public RejectReason Rejection
@@ -375,6 +382,11 @@ namespace Telewheel
             // Nobody hands a headset over online.
         }
 
+        public void SkipCountdown()
+        {
+            // The host keeps the clock, and everyone's countdown runs together.
+        }
+
         public void CompleteSpin(int segment)
         {
             if (m_Phase != MatchPhase.Spin || m_SpinWord != null || m_WheelWords.Length == 0)
@@ -546,6 +558,7 @@ namespace Telewheel
             {
                 return;
             }
+            m_LobbyVersion++;
             m_LocalSeat = message.A;
             m_Rounds = Math.Max(MatchSettings.MinRounds, Math.Min(MatchSettings.MaxRounds, message.B));
             m_Filter = (ContentFilter)message.C;

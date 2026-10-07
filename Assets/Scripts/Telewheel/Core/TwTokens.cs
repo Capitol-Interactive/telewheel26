@@ -54,6 +54,9 @@ namespace Telewheel
         /// <summary>Wheel segment colours, in the order the design system cycles them.</summary>
         public static readonly uint[] WheelHues = { Magenta, Cobalt, Tangerine, Lime, Sun, Ion };
 
+        /// <summary>One colour per player icon (PlayerProfile.IconCount of them) until there is icon art.</summary>
+        public static readonly uint[] PlayerColors = { Magenta, Cobalt, Tangerine, Lime, Sun, Ion, Paper, Line };
+
         // Spacing (design pixels).
         public const int Space1 = 4;
         public const int Space2 = 8;

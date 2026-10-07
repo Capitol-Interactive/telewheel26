@@ -97,6 +97,10 @@ namespace Telewheel
         void Tick(float dt);
 
         void ConfirmHandoff();
+
+        /// <summary>Ends the draw countdown early (Pass &amp; Play only; online the host keeps the clock).</summary>
+        void SkipCountdown();
+
         void CompleteSpin(int segment);
         void ConfirmSpin();
         void SubmitDrawing(byte[] drawing);

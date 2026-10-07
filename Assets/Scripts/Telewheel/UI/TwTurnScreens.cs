@@ -46,15 +46,15 @@ namespace Telewheel
         private bool m_Done;
         private bool m_Armed;
 
-        public TwSpinScreen(MatchMachine machine, TwRandom random, Action<int> onStopped, Action onGotIt)
+        public TwSpinScreen(IMatchView view, TwRandom random, Action<int> onStopped, Action onGotIt)
             : base("Spin", 1.5f, 0f)
         {
             m_Random = random;
             m_OnStopped = onStopped;
-            Label(TwCopy.RoundLabel(machine.Round, machine.Settings.Rounds)
-                + "   " + machine.Settings.NameOf(machine.ActivePlayer), 0f, 0.56f);
+            Label(TwCopy.RoundLabel(view.Round, view.RoundCount)
+                + "   " + view.NameOf(view.ActiveSeat), 0f, 0.56f);
 
-            m_Wheel = new TwWheelView(T, new Vector3(0f, 0.04f, 0f), 0.38f, machine.Settings.WheelSegments);
+            m_Wheel = new TwWheelView(T, new Vector3(0f, 0.04f, 0f), 0.38f, view.WheelSegments);
             m_Wheel.Spin.Stopped += OnWheelStopped;
             m_Wheel.Ticked += () => TwAudio.Play(TwSound.Tick, 0.35f);
 
@@ -144,22 +144,21 @@ namespace Telewheel
     /// </summary>
     public sealed class TwDrawScreen : TwScreen
     {
-        private readonly MatchMachine m_Machine;
+        private readonly IMatchView m_View;
         private readonly TwClockView m_Clock;
         private readonly TwButton m_Submit;
         private readonly TextMeshPro m_GetReady;
 
-        public TwDrawScreen(MatchMachine machine, Action onSubmit)
+        public TwDrawScreen(IMatchView view, Action onSubmit)
             : base("Draw", 1.5f, 0.4f)
         {
-            m_Machine = machine;
-            Stage stage = machine.CurrentStage;
-            new TwChainTrack(T, new Vector3(0f, 0.22f, 0f), machine.Planner, stage.Turn);
+            m_View = view;
+            new TwChainTrack(T, new Vector3(0f, 0.22f, 0f), view.Planner, view.TurnIndex);
             m_Clock = new TwClockView(T, new Vector3(0f, 0.04f, 0f), 0.34f);
             m_GetReady = TwUi.Text(T, TwCopy.GetReady, TwUi.Px(TwTokens.Label) * 1.3f, TwTokens.Sun,
                 TwFonts.Bold, new Vector3(0f, 0.11f, 0f));
             var card = new TwWordCard(T, new Vector3(0f, -0.15f, 0f), 0.56f, 0.15f);
-            card.Set(TwCopy.Draw.TrimEnd('.'), machine.PromptText ?? string.Empty);
+            card.Set(TwCopy.Draw.TrimEnd('.'), view.PromptText ?? string.Empty);
             m_Submit = Button(TwCopy.Submit, 0.58f, -0.04f, 0.3f, 0.1f, TwButton.Style.Primary, onSubmit);
             m_Submit.SetInteractable(false);
             if (OpenBrushFacade.IsMonoscopic)
@@ -171,10 +170,10 @@ namespace Telewheel
 
         public override void Tick(float dt)
         {
-            TurnClock clock = m_Machine.Clock;
-            bool counting = m_Machine.Phase == MatchPhase.Countdown;
+            TurnClock clock = m_View.Clock;
+            bool counting = m_View.Phase == MatchPhase.Countdown;
             m_GetReady.gameObject.SetActive(counting);
-            m_Submit.SetInteractable(m_Machine.Phase == MatchPhase.Turn);
+            m_Submit.SetInteractable(m_View.Phase == MatchPhase.Turn && !m_View.LocalDone);
             float fraction = clock.Total > 0f ? clock.Remaining / clock.Total : 0f;
             m_Clock.Set(clock.WholeSeconds, fraction, !counting && clock.Warning);
         }
@@ -186,19 +185,18 @@ namespace Telewheel
     /// </summary>
     public sealed class TwGuessScreen : TwScreen
     {
-        private readonly MatchMachine m_Machine;
+        private readonly IMatchView m_View;
         private readonly TwClockView m_Clock;
         private readonly TwGuessField m_Field;
         private readonly TwKeyboard m_Keyboard;
         private readonly TwButton m_Guess;
         private float m_Time;
 
-        public TwGuessScreen(MatchMachine machine, Action<string> onGuess)
+        public TwGuessScreen(IMatchView view, Action<string> onGuess)
             : base("Guess", 1.2f, 0f)
         {
-            m_Machine = machine;
-            Stage stage = machine.CurrentStage;
-            new TwChainTrack(T, new Vector3(0f, 0.5f, 0f), machine.Planner, stage.Turn);
+            m_View = view;
+            new TwChainTrack(T, new Vector3(0f, 0.5f, 0f), view.Planner, view.TurnIndex);
             m_Clock = new TwClockView(T, new Vector3(-0.5f, 0.34f, 0f), 0.3f);
             var card = new TwWordCard(T, new Vector3(0.5f, 0.34f, 0f), 0.4f, 0.16f);
             card.Set(TwCopy.Guess.TrimEnd('.'), TwCopy.WhatIsThis);
@@ -214,7 +212,7 @@ namespace Telewheel
         public override void Tick(float dt)
         {
             m_Time += dt;
-            TurnClock clock = m_Machine.Clock;
+            TurnClock clock = m_View.Clock;
             float fraction = clock.Total > 0f ? clock.Remaining / clock.Total : 0f;
             m_Clock.Set(clock.WholeSeconds, fraction, clock.Warning);
             m_Field.Tick(m_Time);

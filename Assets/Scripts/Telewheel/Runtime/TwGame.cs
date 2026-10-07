@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System;
 using System.Collections.Generic;
 using TiltBrush;
 using UnityEngine;
@@ -20,29 +21,38 @@ using UnityEngine.InputSystem;
 namespace Telewheel
 {
     /// <summary>
-    /// Runs a Pass &amp; Play match: shows the right screen for each phase of the
-    /// <see cref="MatchMachine"/> and turns the player's actions back into machine commands. The
-    /// machine decides what happens; this class only puts it on screen and into Open Brush.
+    /// Runs a match, Pass &amp; Play or online: shows the right screen for each phase of the
+    /// <see cref="IMatchSession"/> and turns the player's actions back into session commands. The
+    /// session (the Pass &amp; Play machine, or the online client with a host somewhere) decides what
+    /// happens; this class only puts it on screen and into Open Brush.
     /// </summary>
     public sealed class TwGame
     {
         private const float DrawingSizeMeters = 0.9f;
+        private const string PracticeCode = PracticeRoom.PracticeCode;
 
         private readonly TwDirector m_Director;
         private readonly TwSketchService m_Sketch;
         private readonly TwPointer m_Pointer;
         private readonly TwRandom m_UiRandom;
         private readonly TwFloorSquare m_Floor = new TwFloorSquare();
+        private readonly TwPracticeBackend m_Practice;
+        private readonly Queue<Action> m_Deferred = new Queue<Action>();
 
-        private MatchMachine m_Machine;
+        private IMatchSession m_Session;
+        private OnlineSession m_Online;
         private MatchSettings m_PendingSettings;
         private TwScreen m_Screen;
         private TwScreen m_Overlay;
+        private TwToastScreen m_Toast;
+        private byte[] m_LastDrawing;
         private float m_TimeScale = 1f;
         private int m_PresentShown = -1;
         private int m_LastWholeSecond = -1;
+        private int m_ConnectToken;
         private bool m_EndingDrawTurn;
         private bool m_TitleConfettiShown;
+        private bool m_WaitingShown;
 
         public TwGame(TwDirector director, TwSketchService sketch, TwPointer pointer, int seed)
         {
@@ -50,12 +60,25 @@ namespace Telewheel
             m_Sketch = sketch;
             m_Pointer = pointer;
             m_UiRandom = new TwRandom(seed ^ 0x5EED);
+            m_Practice = new TwPracticeBackend(() => m_LastDrawing);
             m_Floor.SetVisible(false);
         }
 
-        public MatchMachine Machine
+        /// <summary>The match in progress (or the online room, once it has a client); null on the menus.</summary>
+        public IMatchSession Session
         {
-            get { return m_Machine; }
+            get { return m_Session; }
+        }
+
+        /// <summary>The online room, or null when not online.</summary>
+        public OnlineSession Online
+        {
+            get { return m_Online; }
+        }
+
+        public bool InMatch
+        {
+            get { return m_Session != null; }
         }
 
         public TwScreen Screen
@@ -68,8 +91,8 @@ namespace Telewheel
         {
             get
             {
-                return m_Machine != null && m_Machine.Phase == MatchPhase.Turn
-                    && m_Machine.CurrentStage.Kind == StageKind.Draw && !m_EndingDrawTurn;
+                return m_Session != null && m_Session.Phase == MatchPhase.Turn
+                    && m_Session.TurnKind == StageKind.Draw && !m_Session.LocalDone && !m_EndingDrawTurn;
             }
         }
 
@@ -77,11 +100,16 @@ namespace Telewheel
         {
             get
             {
-                if (m_Machine == null)
+                if (m_Session == null)
                 {
                     return m_Screen == null ? "none" : "menu";
                 }
-                return m_Machine.Phase.ToString() + (m_Machine.HasStage ? " " + m_Machine.CurrentStage : string.Empty);
+                string text = m_Session.Phase.ToString();
+                if (m_Session.Phase == MatchPhase.Turn || m_Session.Phase == MatchPhase.Countdown)
+                {
+                    text += " " + m_Session.TurnKind + " " + (m_Session.TurnIndex + 1);
+                }
+                return m_Online == null ? text : "online " + text;
             }
         }
 
@@ -96,7 +124,7 @@ namespace Telewheel
         {
             AbandonMatch();
             Prepare(neutral: true);
-            SetScreen(new TwMainMenuScreen(ShowSetup, ShowSettings));
+            SetScreen(new TwMainMenuScreen(ShowSetup, ShowOnlineMenu, ShowSettings));
             if (!m_TitleConfettiShown)
             {
                 // Confetti belongs to the title screen and the reveal, and only the first time.
@@ -119,7 +147,7 @@ namespace Telewheel
                 CloseSystemMenu();
                 return;
             }
-            bool inMatch = m_Machine != null;
+            bool inMatch = m_Session != null || m_Online != null;
             m_Overlay = new TwSystemMenuScreen(
                 inMatch, IsDrawTurn, OpenPreferencesFromMenu, TakePhoto, ExitMatchFromMenu, CloseSystemMenu);
         }
@@ -136,7 +164,7 @@ namespace Telewheel
         private void OpenPreferencesFromMenu()
         {
             CloseSystemMenu();
-            if (m_Machine == null)
+            if (m_Session == null && m_Online == null)
             {
                 ShowSettings();
             }
@@ -187,6 +215,8 @@ namespace Telewheel
             };
         }
 
+        // ----- Pass & Play -----
+
         public void StartMatch(MatchSettings settings)
         {
             AbandonMatch();
@@ -205,30 +235,239 @@ namespace Telewheel
             }
             m_PendingSettings = settings;
             m_PresentShown = -1;
-            m_Machine = new MatchMachine(settings, new WordDeck(words, settings.Seed));
-            m_Machine.PhaseChanged += OnPhaseChanged;
-            m_Machine.TurnExpired += OnTurnExpired;
+            var machine = new MatchMachine(settings, new WordDeck(words, settings.Seed));
+            AttachSession(new PassAndPlaySession(machine));
             m_Director.Log("Match started: " + settings.PlayerCount + " players, " + settings.Rounds
                 + " rounds, " + settings.Filter + " words, seed " + settings.Seed + ".");
-            m_Machine.Start();
+            machine.Start();
         }
 
-        /// <summary>Leaves the match (Exit Match) and returns to the main menu.</summary>
+        // ----- Online -----
+
+        public void ShowOnlineMenu()
+        {
+            AbandonMatch();
+            Prepare(neutral: true);
+            ITwOnlineBackend backend = TwOnline.Backend;
+            SetScreen(new TwOnlineMenuScreen(new TwOnlineMenuOptions
+            {
+                Profile = TwPrefs.Profile,
+                UnavailableReason = backend.UnavailableReason,
+                PracticeVisible = TwOnline.PracticeVisible,
+                OnHost = () => HostOnline(backend),
+                OnJoin = ShowJoinCode,
+                OnProfile = ShowProfile,
+                OnPracticeHost = () => HostOnline(m_Practice),
+                OnPracticeJoin = () => JoinOnline(m_Practice, PracticeCode),
+                OnBack = ShowMainMenu,
+            }));
+        }
+
+        /// <summary>Hosts a practice room straight away (for unattended runs with --Telewheel.FakeOnline).</summary>
+        public void StartPracticeHost()
+        {
+            HostOnline(m_Practice);
+        }
+
+        private void ShowProfile()
+        {
+            Prepare(neutral: true);
+            SetScreen(new TwProfileScreen(TwPrefs.Profile, saved =>
+            {
+                TwPrefs.SaveProfile(saved);
+                ShowOnlineMenu();
+            }, ShowOnlineMenu));
+        }
+
+        private void ShowJoinCode()
+        {
+            Prepare(neutral: true);
+            SetScreen(new TwJoinCodeScreen(code => JoinOnline(TwOnline.Backend, code), ShowOnlineMenu));
+        }
+
+        private void HostOnline(ITwOnlineBackend backend)
+        {
+            MatchSettings settings = DefaultSettings();
+            settings.Seed = System.Environment.TickCount;
+            int token = BeginConnecting();
+            backend.Host(TwPrefs.Profile, settings,
+                session => OnOnlineReady(token, session), message => OnOnlineFailed(token, message));
+        }
+
+        private void JoinOnline(ITwOnlineBackend backend, string code)
+        {
+            int token = BeginConnecting();
+            backend.Join(code, TwPrefs.Profile,
+                session => OnOnlineReady(token, session), message => OnOnlineFailed(token, message));
+        }
+
+        // Shows "Connecting..." with a way out, and returns a token so a late answer to a cancelled try is ignored.
+        private int BeginConnecting()
+        {
+            AbandonMatch();
+            Prepare(neutral: true);
+            int token = ++m_ConnectToken;
+            SetScreen(new TwNoticeScreen("ONLINE", TwCopy.Connecting, TwCopy.Back, () =>
+            {
+                m_ConnectToken++;
+                ShowOnlineMenu();
+            }));
+            return token;
+        }
+
+        private void OnOnlineReady(int token, OnlineSession session)
+        {
+            if (token != m_ConnectToken)
+            {
+                session.Leave();
+                return;
+            }
+            m_Online = session;
+            OnlineMatchClient client = session.Client;
+            AttachSession(client);
+            client.StateChanged += OnClientStateChanged;
+            client.PlayerLeft += OnPlayerLeft;
+            client.EnvironmentChanged += OnEnvironmentChanged;
+            m_Director.Log("Online: " + (session.IsHost ? "hosting " : "joining ") + session.JoinCode
+                + (session.IsPractice ? " (practice)" : string.Empty) + ".");
+            if (client.State == ClientState.Lobby)
+            {
+                ShowLobby();
+            }
+        }
+
+        private void OnOnlineFailed(int token, string message)
+        {
+            if (token != m_ConnectToken)
+            {
+                return;
+            }
+            ShowNotice("CAN'T CONNECT", message, ShowOnlineMenu);
+        }
+
+        private void ShowLobby()
+        {
+            Prepare(neutral: true);
+            SetScreen(new TwLobbyScreen(m_Online, StartOnlineMatch, ExitMatch));
+        }
+
+        private void StartOnlineMatch()
+        {
+            if (m_Online == null || !m_Online.IsHost)
+            {
+                return;
+            }
+            if (!m_Online.Room.Start())
+            {
+                ShowToast(m_Online.Room.StartProblem);
+            }
+        }
+
+        private void OnClientStateChanged()
+        {
+            if (m_Online == null)
+            {
+                return;
+            }
+            OnlineMatchClient client = m_Online.Client;
+            switch (client.State)
+            {
+                case ClientState.Lobby:
+                    ShowLobby();
+                    break;
+                case ClientState.Rejected:
+                    Defer(() => ShowNotice("CAN'T JOIN", TwCopy.RejectedLine(client.Rejection), ShowOnlineMenu));
+                    break;
+                case ClientState.Ended:
+                    Defer(() => ShowNotice("MATCH ENDED", TwCopy.EndedLine(client.EndedBecause), ShowOnlineMenu));
+                    break;
+            }
+        }
+
+        private void OnPlayerLeft(int seat)
+        {
+            if (m_Online != null)
+            {
+                ShowToast(TwCopy.PlayerLeftLine(m_Online.Client.NameOf(seat)));
+            }
+        }
+
+        private void OnEnvironmentChanged(string name)
+        {
+            // The host's pick, unless this player is in mixed reality (which is personal).
+            if (!string.IsNullOrEmpty(name) && !TwPrefs.MixedReality)
+            {
+                OpenBrushFacade.ApplyEnvironment(name);
+            }
+        }
+
+        private void ShowNotice(string title, string message, Action onClose)
+        {
+            AbandonMatch();
+            Prepare(neutral: true);
+            SetScreen(new TwNoticeScreen(title, message, TwCopy.Okay, onClose));
+        }
+
+        private void ShowToast(string text)
+        {
+            if (m_Toast != null)
+            {
+                m_Toast.Dispose();
+            }
+            m_Toast = new TwToastScreen(text, 4f);
+        }
+
+        // Teardown that would pull the session out from under its own callbacks waits for the next frame.
+        private void Defer(Action action)
+        {
+            m_Deferred.Enqueue(action);
+        }
+
+        /// <summary>Leaves the match or room (Exit Match) and returns to a menu.</summary>
         public void ExitMatch()
         {
-            ShowMainMenu();
+            if (m_Online != null)
+            {
+                ShowOnlineMenu();
+            }
+            else
+            {
+                ShowMainMenu();
+            }
+        }
+
+        private void AttachSession(IMatchSession session)
+        {
+            m_Session = session;
+            m_WaitingShown = false;
+            session.PhaseChanged += OnPhaseChanged;
+            session.TurnExpired += OnTurnExpired;
         }
 
         private void AbandonMatch()
         {
-            if (m_Machine == null)
+            if (m_Session != null)
             {
-                return;
+                m_Session.PhaseChanged -= OnPhaseChanged;
+                m_Session.TurnExpired -= OnTurnExpired;
             }
-            m_Machine.PhaseChanged -= OnPhaseChanged;
-            m_Machine.TurnExpired -= OnTurnExpired;
-            m_Machine = null;
+            if (m_Online != null)
+            {
+                OnlineMatchClient client = m_Online.Client;
+                client.StateChanged -= OnClientStateChanged;
+                client.PlayerLeft -= OnPlayerLeft;
+                client.EnvironmentChanged -= OnEnvironmentChanged;
+                m_Online.Leave();
+                m_Online = null;
+                TwPrefs.RestoreEnvironment();
+            }
+            else if (m_Session != null)
+            {
+                m_Session.Dispose();
+            }
+            m_Session = null;
             m_EndingDrawTurn = false;
+            m_WaitingShown = false;
         }
 
         // ----- Per frame -----
@@ -236,6 +475,10 @@ namespace Telewheel
         public void Update(float dt)
         {
             float scaled = dt * m_TimeScale;
+            while (m_Deferred.Count > 0)
+            {
+                m_Deferred.Dequeue()();
+            }
             if (m_Pointer != null)
             {
                 // While drawing, the mouse belongs to the brush and the laser stays out of the way.
@@ -245,15 +488,22 @@ namespace Telewheel
             {
                 Submit();
             }
-            if (m_Machine != null)
+            if (m_Online != null)
             {
-                m_Machine.Tick(scaled);
-                if (m_Machine != null && m_Machine.Phase == MatchPhase.Present
-                    && m_Machine.PresentIndex != m_PresentShown)
+                m_Online.Tick(scaled);
+            }
+            else if (m_Session != null)
+            {
+                m_Session.Tick(scaled);
+            }
+            if (m_Session != null)
+            {
+                if (m_Session.Phase == MatchPhase.Present && m_Session.PresentIndex != m_PresentShown)
                 {
                     ShowPresentItem();
                 }
                 PlayClockSounds();
+                ShowWaitingWhenDone();
             }
             if (m_Screen != null)
             {
@@ -263,6 +513,15 @@ namespace Telewheel
             {
                 m_Overlay.Tick(scaled);
             }
+            if (m_Toast != null)
+            {
+                m_Toast.Tick(dt);
+                if (m_Toast.Expired)
+                {
+                    m_Toast.Dispose();
+                    m_Toast = null;
+                }
+            }
         }
 
         public void Dispose()
@@ -270,6 +529,11 @@ namespace Telewheel
             AbandonMatch();
             CloseSystemMenu();
             DisposeScreen();
+            if (m_Toast != null)
+            {
+                m_Toast.Dispose();
+                m_Toast = null;
+            }
             m_Floor.Destroy();
         }
 
@@ -293,11 +557,12 @@ namespace Telewheel
             }
         }
 
-        // ----- Machine events -----
+        // ----- Session events -----
 
         private void OnPhaseChanged(MatchPhase from, MatchPhase to)
         {
             m_LastWholeSecond = -1;
+            m_WaitingShown = false;
             switch (to)
             {
                 case MatchPhase.Handoff:
@@ -307,7 +572,7 @@ namespace Telewheel
                     break;
                 case MatchPhase.Spin:
                     Prepare(neutral: true);
-                    SetScreen(new TwSpinScreen(m_Machine, m_UiRandom, OnWheelStopped, OnSpinConfirmed));
+                    SetScreen(new TwSpinScreen(m_Session, m_UiRandom, OnWheelStopped, OnSpinConfirmed));
                     TwAudio.PlayVoice("vo_spin");
                     break;
                 case MatchPhase.Countdown:
@@ -315,7 +580,7 @@ namespace Telewheel
                     TwAudio.PlayVoice("vo_get_ready");
                     break;
                 case MatchPhase.Turn:
-                    if (m_Machine.CurrentStage.Kind == StageKind.Draw)
+                    if (m_Session.TurnKind == StageKind.Draw)
                     {
                         if (from != MatchPhase.Countdown)
                         {
@@ -337,13 +602,14 @@ namespace Telewheel
                     break;
                 case MatchPhase.Vote:
                     Prepare(neutral: true);
-                    SetScreen(new TwVoteScreen(m_Machine, vote => m_Machine.CastVote(0, vote)));
+                    SetScreen(new TwVoteScreen(m_Session, vote => m_Session.CastVote(vote)));
                     TwAudio.PlayVoice("vo_vote");
                     break;
                 case MatchPhase.VoteResult:
                     Prepare(neutral: true);
-                    SetScreen(new TwVoteResultScreen(m_Machine, m_Machine.ContinueAfterVote));
-                    if (m_Machine.LastVoteLanded)
+                    SetScreen(new TwVoteResultScreen(
+                        m_Session, m_Session.IsOnline ? null : (Action)m_Session.ContinueAfterVote));
+                    if (m_Session.LastVoteLanded)
                     {
                         TwAudio.Play(TwSound.Ding, 0.6f);
                         TwAudio.PlayVoice("vo_nailed");
@@ -357,13 +623,16 @@ namespace Telewheel
                     break;
                 case MatchPhase.RoundEnd:
                     Prepare(neutral: true);
-                    SetScreen(new TwRoundEndScreen(m_Machine, m_Machine.ContinueRound));
+                    SetScreen(new TwRoundEndScreen(
+                        m_Session, m_Session.IsOnline ? null : (Action)m_Session.ContinueRound));
                     TwAudio.Play(TwSound.Fanfare, 0.5f);
                     TwAudio.PlayVoice("vo_round_over");
                     break;
                 case MatchPhase.GameEnd:
                     Prepare(neutral: true);
-                    SetScreen(new TwGameEndScreen(m_Machine, PlayAgainSame, PlayAgainNew, ShowMainMenu));
+                    SetScreen(m_Session.IsOnline
+                        ? new TwGameEndScreen(m_Session, null, null, ExitMatch)
+                        : new TwGameEndScreen(m_Session, PlayAgainSame, PlayAgainNew, ShowMainMenu));
                     TwAudio.Play(TwSound.Fanfare, 0.6f);
                     TwAudio.PlayVoice("vo_game_over");
                     TwFx.Confetti(TwUi.PointInFront(1.5f, 0.4f), 140);
@@ -374,7 +643,7 @@ namespace Telewheel
         // Beeps for the last three seconds of the countdown and ticks for the last five of a turn.
         private void PlayClockSounds()
         {
-            TurnClock clock = m_Machine.Clock;
+            TurnClock clock = m_Session.Clock;
             int whole = clock.WholeSeconds;
             if (whole == m_LastWholeSecond)
             {
@@ -385,11 +654,11 @@ namespace Telewheel
             {
                 return;
             }
-            if (m_Machine.Phase == MatchPhase.Countdown && whole <= 3)
+            if (m_Session.Phase == MatchPhase.Countdown && whole <= 3)
             {
                 TwAudio.Play(TwSound.Beep, 0.5f);
             }
-            else if (m_Machine.Phase == MatchPhase.Turn && clock.Warning && whole <= 5)
+            else if (m_Session.Phase == MatchPhase.Turn && clock.Warning && whole <= 5)
             {
                 TwAudio.Play(TwSound.Tick, 0.5f);
             }
@@ -397,49 +666,67 @@ namespace Telewheel
 
         private void OnTurnExpired()
         {
-            if (m_Machine == null)
+            if (m_Session == null)
             {
                 return;
             }
-            if (m_Machine.CurrentStage.Kind == StageKind.Draw)
+            if (m_Session.TurnKind == StageKind.Draw)
             {
                 EndDrawTurn();
             }
             else
             {
                 var guess = m_Screen as TwGuessScreen;
-                m_Machine.SubmitGuess(guess == null ? string.Empty : guess.TypedText);
+                m_Session.SubmitGuess(guess == null ? string.Empty : guess.TypedText);
             }
+        }
+
+        // Online, handing in your part does not change the phase: the room waits for the others.
+        private void ShowWaitingWhenDone()
+        {
+            bool done = m_Session.IsOnline && m_Session.LocalDone && !m_EndingDrawTurn;
+            if (!done)
+            {
+                m_WaitingShown = false;
+                return;
+            }
+            if (m_WaitingShown)
+            {
+                return;
+            }
+            m_WaitingShown = true;
+            Prepare(neutral: true);
+            SetScreen(new TwWaitingScreen(m_Session));
         }
 
         // ----- Screens for each phase -----
 
         private void ShowHandoff()
         {
-            int next = m_Machine.ActivePlayer;
-            string round = TwCopy.RoundLabel(m_Machine.Round, m_Machine.Settings.Rounds);
-            SetScreen(new TwHandoffScreen(m_Machine.Settings.NameOf(next), round, m_Machine.ConfirmHandoff));
+            int next = m_Session.ActiveSeat;
+            string round = TwCopy.RoundLabel(m_Session.Round, m_Session.RoundCount);
+            SetScreen(new TwHandoffScreen(m_Session.NameOf(next), round, m_Session.ConfirmHandoff));
         }
 
         private void OnWheelStopped(int segment)
         {
-            if (m_Machine == null || m_Machine.Phase != MatchPhase.Spin)
+            if (m_Session == null || m_Session.Phase != MatchPhase.Spin)
             {
                 return;
             }
-            m_Machine.CompleteSpin(segment);
+            m_Session.CompleteSpin(segment);
             var spin = m_Screen as TwSpinScreen;
-            if (spin != null)
+            if (spin != null && m_Session.SpinWord != null)
             {
-                spin.ShowWord(m_Machine.SpinWord);
+                spin.ShowWord(m_Session.SpinWord);
             }
         }
 
         private void OnSpinConfirmed()
         {
-            if (m_Machine != null && m_Machine.Phase == MatchPhase.Spin && m_Machine.SpinWord != null)
+            if (m_Session != null && m_Session.Phase == MatchPhase.Spin && m_Session.SpinWord != null)
             {
-                m_Machine.ConfirmSpin();
+                m_Session.ConfirmSpin();
             }
         }
 
@@ -453,7 +740,7 @@ namespace Telewheel
             OpenBrushFacade.SetDrawingAllowed(false);
             m_Floor.PlaceAhead(OpenBrushFacade.Head);
             m_Floor.SetVisible(true);
-            SetScreen(new TwDrawScreen(m_Machine, Submit));
+            SetScreen(new TwDrawScreen(m_Session, Submit));
         }
 
         private void StartDrawing()
@@ -465,15 +752,15 @@ namespace Telewheel
 
         private void EndDrawTurn()
         {
-            if (m_EndingDrawTurn || m_Machine == null)
+            if (m_EndingDrawTurn || m_Session == null)
             {
                 return;
             }
             m_EndingDrawTurn = true;
-            m_Director.StartCoroutine(EndDrawTurnRoutine());
+            m_Director.StartCoroutine(EndDrawTurnRoutine(m_Session, m_Session.TurnIndex));
         }
 
-        private System.Collections.IEnumerator EndDrawTurnRoutine()
+        private System.Collections.IEnumerator EndDrawTurnRoutine(IMatchSession session, int turn)
         {
             // Stop painting, let any stroke in progress finish, then save the drawing.
             OpenBrushFacade.SetDrawingAllowed(false);
@@ -484,13 +771,19 @@ namespace Telewheel
                 waited += Time.unscaledDeltaTime;
                 yield return null;
             }
-            if (m_Machine != null && m_Machine.Phase == MatchPhase.Turn)
+            // The session may have moved on (the host's clock can run out first), or been left.
+            bool stillThisTurn = m_Session == session && session.Phase == MatchPhase.Turn
+                && session.TurnKind == StageKind.Draw && session.TurnIndex == turn && !session.LocalDone;
+            if (stillThisTurn)
             {
                 byte[] drawing = m_Sketch.Capture();
+                m_LastDrawing = drawing;
                 m_Director.Log("Drawing saved: " + drawing.Length + " bytes.");
                 TwFx.Poof(TwUi.PointInFront(1.4f, 0.0f));
                 TwAudio.Play(TwSound.Poof, 0.6f);
-                m_Machine.SubmitDrawing(drawing);
+                // Clear the flag first: online, handing the drawing in does not change the phase.
+                m_EndingDrawTurn = false;
+                session.SubmitDrawing(drawing);
             }
             m_EndingDrawTurn = false;
         }
@@ -498,10 +791,10 @@ namespace Telewheel
         private void BeginGuessTurn()
         {
             Prepare(neutral: true);
-            byte[] drawing = m_Machine.PromptDrawing;
+            byte[] drawing = m_Session.PromptDrawing;
             Vector3 center = TwUi.PointInFront(2.0f, 0.15f);
             int shown = m_Sketch.Show(drawing, center, 1.0f);
-            var guess = new TwGuessScreen(m_Machine, OnGuessSubmitted);
+            var guess = new TwGuessScreen(m_Session, OnGuessSubmitted);
             if (shown == 0)
             {
                 guess.ShowBlank();
@@ -511,38 +804,38 @@ namespace Telewheel
 
         private void OnGuessSubmitted(string text)
         {
-            if (m_Machine != null && m_Machine.Phase == MatchPhase.Turn
-                && m_Machine.CurrentStage.Kind == StageKind.Guess)
+            if (m_Session != null && m_Session.Phase == MatchPhase.Turn && m_Session.TurnKind == StageKind.Guess)
             {
-                m_Machine.SubmitGuess(text);
+                m_Session.SubmitGuess(text);
             }
         }
 
         private void ShowPresentItem()
         {
-            if (m_Machine == null || m_Machine.Phase != MatchPhase.Present)
+            if (m_Session == null || m_Session.Phase != MatchPhase.Present)
             {
                 return;
             }
-            m_PresentShown = m_Machine.PresentIndex;
+            m_PresentShown = m_Session.PresentIndex;
             TwAudio.Play(TwSound.Pop, 0.5f);
-            PresentItem item = m_Machine.CurrentPresentItem;
+            PresentItem item = m_Session.CurrentPresentItem;
             m_Sketch.Clear();
             if (item.Kind == PresentItemKind.Drawing)
             {
                 m_Sketch.Show(item.Drawing, TwUi.PointInFront(1.9f, 0.1f), DrawingSizeMeters);
             }
-            SetScreen(new TwPresentScreen(m_Machine, m_Machine.SkipPresent));
+            SetScreen(new TwPresentScreen(m_Session, m_Session.SkipPresent));
         }
 
         private void PlayAgainSame()
         {
-            if (m_Machine == null)
+            var pass = m_Session as PassAndPlaySession;
+            if (pass == null)
             {
                 return;
             }
-            m_Machine.Reset();
-            m_Machine.Start();
+            pass.Machine.Reset();
+            pass.Machine.Start();
         }
 
         private void PlayAgainNew()
@@ -575,11 +868,17 @@ namespace Telewheel
             DisposeScreen();
             m_Screen = screen;
             // Every screen but the menus gets a MENU button, since the hand menu is hidden between turns.
-            if (screen != null && !(screen is TwMainMenuScreen) && !(screen is TwSetupScreen)
-                && !(screen is TwSettingsScreen))
+            if (screen != null && !IsMenuScreen(screen))
             {
                 screen.AddMenuButton(ToggleSystemMenu);
             }
+        }
+
+        private static bool IsMenuScreen(TwScreen screen)
+        {
+            return screen is TwMainMenuScreen || screen is TwSetupScreen || screen is TwSettingsScreen
+                || screen is TwOnlineMenuScreen || screen is TwProfileScreen || screen is TwJoinCodeScreen
+                || screen is TwLobbyScreen || screen is TwNoticeScreen;
         }
 
         public bool SystemMenuOpen

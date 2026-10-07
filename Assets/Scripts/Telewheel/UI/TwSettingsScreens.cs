@@ -22,6 +22,7 @@ namespace Telewheel
     {
         private readonly TwButton m_MixedReality;
         private readonly TwButton m_Hand;
+        private readonly TMPro.TextMeshPro m_Note;
 
         public TwSettingsScreen(Action onBack)
             : base("Settings", 1.5f, 0f)
@@ -30,10 +31,11 @@ namespace Telewheel
             Title(TwCopy.Settings, 0.36f);
 
             m_MixedReality = Button(string.Empty, 0f, 0.18f, 0.74f, 0.12f, TwButton.Style.Secondary, ToggleMixedReality);
+            m_Note = Body(string.Empty, 0.1f, 0.9f);
             if (!OpenBrushFacade.PassthroughSupported)
             {
                 m_MixedReality.SetInteractable(false);
-                Body("Mixed reality is not available on this device.", 0.1f);
+                m_Note.text = "Mixed reality is not available on this device.";
             }
 
             m_Hand = Button(string.Empty, 0f, -0.04f, 0.74f, 0.12f, TwButton.Style.Secondary, ToggleHand);
@@ -48,7 +50,8 @@ namespace Telewheel
 
         private void ToggleMixedReality()
         {
-            TwPrefs.SetMixedReality(!TwPrefs.MixedReality);
+            bool switched = TwPrefs.SetMixedReality(!TwPrefs.MixedReality);
+            m_Note.text = switched ? string.Empty : TwCopy.MixedRealityStuck;
             Refresh();
         }
 

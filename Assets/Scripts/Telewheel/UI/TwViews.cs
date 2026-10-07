@@ -108,10 +108,12 @@ namespace Telewheel
     {
         public readonly GameObject Root;
         private readonly TextMeshPro m_Text;
+        private readonly string m_Placeholder;
         private string m_Value = string.Empty;
 
-        public TwGuessField(Transform parent, Vector3 localPosition, float width)
+        public TwGuessField(Transform parent, Vector3 localPosition, float width, string placeholder = null)
         {
+            m_Placeholder = placeholder ?? TwCopy.TypeYourGuess;
             Root = new GameObject("GuessField");
             Root.transform.SetParent(parent, false);
             Root.transform.localPosition = localPosition;
@@ -149,7 +151,7 @@ namespace Telewheel
             if (m_Value.Length == 0)
             {
                 m_Text.color = TwGfx.ToColor(TwTokens.InkMuted);
-                m_Text.text = cursorOn ? "|" + TwCopy.TypeYourGuess : " " + TwCopy.TypeYourGuess;
+                m_Text.text = cursorOn ? "|" + m_Placeholder : " " + m_Placeholder;
             }
             else
             {

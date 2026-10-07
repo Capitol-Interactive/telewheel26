@@ -48,7 +48,6 @@ namespace Telewheel
         public const string Start = "START";
         public const string FamilyFriendly = "FAMILY FRIENDLY";
         public const string Raunchy = "RAUNCHY 18+";
-        public const string OnlineSoon = "Online play is coming soon.";
 
         // Settings.
         public const string MixedReality = "MIXED REALITY";
@@ -86,6 +85,95 @@ namespace Telewheel
         public const string PlayAgainNew = "PLAY AGAIN (NEW ARTISTS)";
         public const string PlayAgainSame = "PLAY AGAIN (SAME ARTISTS)";
         public const string MainMenu = "MAIN MENU";
+
+        // Online.
+        public const string PrivateRoom = "PRIVATE ROOM";
+        public const string PublicGame = "PUBLIC GAME";
+        public const string JoinWithCode = "JOIN WITH CODE";
+        public const string PracticeHost = "PRACTICE: HOST";
+        public const string PracticeJoin = "PRACTICE: JOIN";
+        public const string ComingSoon = "Coming soon.";
+        public const string YourProfile = "YOUR PROFILE";
+        public const string PickAnIcon = "PICK AN ICON";
+        public const string TypeYourName = "Type your name";
+        public const string SetYourName = "Set your name";
+        public const string Save = "SAVE";
+        public const string EnterRoomCode = "ENTER THE ROOM CODE";
+        public const string TypeTheCode = "Type the 4-letter code";
+        public const string Join = "JOIN";
+        public const string LeaveRoom = "LEAVE ROOM";
+        public const string HostTag = "HOST";
+        public const string YouTag = "YOU";
+        public const string WaitingForHost = "Waiting for the host to start.";
+        public const string WaitingForPlayers = "Waiting for more players.";
+        public const string Connecting = "Connecting...";
+        public const string ResultsComing = "Final results in a moment.";
+        public const string NextRoundComing = "Next round in a moment.";
+        public const string HereWeGo = "Here we go...";
+        public const string Okay = "OK";
+        public const string PracticeNote = "Practice room: the other players are computer players.";
+        public const string PracticeRoomTitle = "PRACTICE ROOM";
+        public const string OnlineUnavailable = "Online play is unavailable.";
+        public const string MixedRealityStuck = "Can't leave mixed reality while other players are in the room.";
+        public const string EnvironmentLabel = "ENVIRONMENT";
+        public const string DefaultEnvironment = "DEFAULT";
+
+        public static string RoomLabel(string code)
+        {
+            return "ROOM " + code;
+        }
+
+        public static string OwnerMoves(string name)
+        {
+            return "Waiting for " + name;
+        }
+
+        /// <summary>"Waiting for Ann", "Waiting for Ann and Bo", "Waiting for Ann, Bo and 2 more".</summary>
+        public static string WaitingFor(System.Collections.Generic.IList<string> names)
+        {
+            if (names == null || names.Count == 0)
+            {
+                return HereWeGo;
+            }
+            if (names.Count == 1)
+            {
+                return "Waiting for " + names[0];
+            }
+            if (names.Count == 2)
+            {
+                return "Waiting for " + names[0] + " and " + names[1];
+            }
+            if (names.Count == 3)
+            {
+                return "Waiting for " + names[0] + ", " + names[1] + " and " + names[2];
+            }
+            return "Waiting for " + names[0] + ", " + names[1] + " and " + (names.Count - 2) + " more";
+        }
+
+        public static string PlayerLeftLine(string name)
+        {
+            return name + " left. The host is playing their turns.";
+        }
+
+        public static string RejectedLine(RejectReason reason)
+        {
+            switch (reason)
+            {
+                case RejectReason.RoomFull:
+                    return "That room is full.";
+                case RejectReason.MatchStarted:
+                    return "That match has already started.";
+                default:
+                    return "That room is running a different version of the game.";
+            }
+        }
+
+        public static string EndedLine(EndReason reason)
+        {
+            return reason == EndReason.NotEnoughPlayers
+                ? "Not enough players are left to carry on."
+                : "The host left, so the match ended.";
+        }
 
         public static string PassTo(string playerName)
         {

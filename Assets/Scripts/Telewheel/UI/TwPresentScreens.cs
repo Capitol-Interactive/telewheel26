@@ -24,29 +24,28 @@ namespace Telewheel
     /// </summary>
     public sealed class TwPresentScreen : TwScreen
     {
-        private readonly MatchMachine m_Machine;
+        private readonly IMatchView m_View;
         private readonly TwClockView m_Clock;
 
-        public TwPresentScreen(MatchMachine machine, Action onSkip)
+        public TwPresentScreen(IMatchView view, Action onSkip)
             : base("Present", 1.7f, 0.1f)
         {
-            m_Machine = machine;
-            PresentItem item = machine.CurrentPresentItem;
-            MatchSettings settings = machine.Settings;
+            m_View = view;
+            PresentItem item = view.CurrentPresentItem;
             // Item 0 is the spun word (the spin); item i is the chain's turn i - 1.
-            new TwChainTrack(T, new Vector3(0f, 0.6f, 0f), machine.Planner, machine.PresentIndex - 1);
+            new TwChainTrack(T, new Vector3(0f, 0.6f, 0f), view.Planner, view.PresentIndex - 1);
 
             string caption;
             switch (item.Kind)
             {
                 case PresentItemKind.Word:
-                    caption = TwCopy.OwnerLine(settings.NameOf(item.Player));
+                    caption = TwCopy.OwnerLine(view.NameOf(item.Player));
                     break;
                 case PresentItemKind.Drawing:
-                    caption = TwCopy.DrawnBy(settings.NameOf(item.Player));
+                    caption = TwCopy.DrawnBy(view.NameOf(item.Player));
                     break;
                 default:
-                    caption = TwCopy.GuessedBy(settings.NameOf(item.Player));
+                    caption = TwCopy.GuessedBy(view.NameOf(item.Player));
                     break;
             }
             Label(caption, 0f, -0.55f);
@@ -58,12 +57,20 @@ namespace Telewheel
             }
 
             m_Clock = new TwClockView(T, new Vector3(-0.62f, -0.55f, 0f), 0.26f);
-            Button(TwCopy.Skip, 0.62f, -0.55f, 0.26f, 0.09f, TwButton.Style.Secondary, onSkip);
+            if (view.CanAdvancePresent)
+            {
+                Button(TwCopy.Skip, 0.62f, -0.55f, 0.26f, 0.09f, TwButton.Style.Secondary, onSkip);
+            }
+            else
+            {
+                // Online, only the chain's owner moves the reveal along.
+                Label(TwCopy.OwnerMoves(view.NameOf(view.PresentOwner)), 0.45f, -0.55f);
+            }
         }
 
         public override void Tick(float dt)
         {
-            TurnClock clock = m_Machine.Clock;
+            TurnClock clock = m_View.Clock;
             float fraction = clock.Total > 0f ? clock.Remaining / clock.Total : 0f;
             m_Clock.Set(clock.WholeSeconds, fraction, false);
         }
@@ -72,20 +79,19 @@ namespace Telewheel
     /// <summary>The final guess is up. Did it land? One shared tap for the room.</summary>
     public sealed class TwVoteScreen : TwScreen
     {
-        private readonly MatchMachine m_Machine;
+        private readonly IMatchView m_View;
         private readonly TwClockView m_Clock;
 
-        public TwVoteScreen(MatchMachine machine, Action<bool> onVote)
+        public TwVoteScreen(IMatchView view, Action<bool> onVote)
             : base("Vote", 1.7f, 0.1f)
         {
-            m_Machine = machine;
-            PresentItem item = machine.CurrentPresentItem;
-            MatchSettings settings = machine.Settings;
-            new TwChainTrack(T, new Vector3(0f, 0.6f, 0f), machine.Planner, machine.Planner.TurnsPerChain - 1);
+            m_View = view;
+            PresentItem item = view.CurrentPresentItem;
+            new TwChainTrack(T, new Vector3(0f, 0.6f, 0f), view.Planner, view.Planner.TurnsPerChain - 1);
 
-            Label(TwCopy.GuessedBy(settings.NameOf(item.Player)), 0f, 0.36f);
+            Label(TwCopy.GuessedBy(view.NameOf(item.Player)), 0f, 0.36f);
             new TwHeadline(T, item.Text ?? string.Empty, TwUi.Px(TwTokens.DisplayXl), new Vector3(0f, 0.22f, 0f));
-            Body("The word was " + machine.PresentItems[0].Text + ".", 0.06f);
+            Body("The word was " + view.PresentedWord + ".", 0.06f);
             TwUi.Display(T, TwCopy.DidItLand, TwUi.Px(TwTokens.DisplayLg), TwTokens.Ink, new Vector3(0f, -0.1f, 0f));
             Button(TwCopy.Yes, -0.22f, -0.3f, 0.34f, 0.13f, TwButton.Style.Positive, () => onVote(true));
             Button(TwCopy.No, 0.22f, -0.3f, 0.34f, 0.13f, TwButton.Style.Negative, () => onVote(false));
@@ -94,7 +100,7 @@ namespace Telewheel
 
         public override void Tick(float dt)
         {
-            TurnClock clock = m_Machine.Clock;
+            TurnClock clock = m_View.Clock;
             float fraction = clock.Total > 0f ? clock.Remaining / clock.Total : 0f;
             m_Clock.Set(clock.WholeSeconds, fraction, clock.Warning);
         }
@@ -103,52 +109,75 @@ namespace Telewheel
     /// <summary>"NAILED IT!" or "IT DRIFTED!" after the vote, with the point if there was one.</summary>
     public sealed class TwVoteResultScreen : TwScreen
     {
-        public TwVoteResultScreen(MatchMachine machine, Action onNext)
+        /// <param name="onNext">Null when the game moves on by itself (online).</param>
+        public TwVoteResultScreen(IMatchView view, Action onNext)
             : base("Vote result", 1.6f, 0.1f)
         {
-            bool landed = machine.LastVoteLanded;
+            bool landed = view.LastVoteLanded;
             Backdrop(1.0f, 0.75f);
             new TwHeadline(T, landed ? TwCopy.NailedIt : TwCopy.ItDrifted,
                 TwUi.Px(TwTokens.DisplayXl), new Vector3(0f, 0.15f, 0f));
-            string owner = machine.Settings.NameOf(machine.Chains[machine.PresentChain].Owner);
+            string owner = view.NameOf(view.PresentOwner);
             Heading(landed ? owner + ": +1 point" : TwCopy.DriftedLine, -0.02f, 0.9f);
-            Button(TwCopy.Next, 0f, -0.2f, 0.4f, 0.11f, TwButton.Style.Primary, onNext);
+            if (onNext != null)
+            {
+                Button(TwCopy.Next, 0f, -0.2f, 0.4f, 0.11f, TwButton.Style.Primary, onNext);
+            }
         }
     }
 
     /// <summary>The scores after a round.</summary>
     public sealed class TwRoundEndScreen : TwScreen
     {
-        public TwRoundEndScreen(MatchMachine machine, Action onNext)
+        /// <param name="onNext">Null when the game moves on by itself (online).</param>
+        public TwRoundEndScreen(IMatchView view, Action onNext)
             : base("Round end", 1.5f, 0f)
         {
             Backdrop(1.0f, 1.0f);
-            Title(machine.IsFinalRound ? TwCopy.GameOver : TwCopy.RoundOver, 0.4f);
-            Label(TwCopy.RoundLabel(machine.Round, machine.Settings.Rounds), 0f, 0.28f);
-            Scoreboard(machine, 0.16f, 0.065f);
-            Button(machine.IsFinalRound ? "Final results" : TwCopy.Next, 0f, -0.42f, 0.5f, 0.11f,
-                TwButton.Style.Primary, onNext);
+            Title(view.IsFinalRound ? TwCopy.GameOver : TwCopy.RoundOver, 0.4f);
+            Label(TwCopy.RoundLabel(view.Round, view.RoundCount), 0f, 0.28f);
+            Scoreboard(view, 0.16f, 0.065f);
+            if (onNext != null)
+            {
+                Button(view.IsFinalRound ? "Final results" : TwCopy.Next, 0f, -0.42f, 0.5f, 0.11f,
+                    TwButton.Style.Primary, onNext);
+            }
+            else
+            {
+                Body(view.IsFinalRound ? TwCopy.ResultsComing : TwCopy.NextRoundComing, -0.42f);
+            }
         }
     }
 
     /// <summary>The winner and the ways to carry on.</summary>
     public sealed class TwGameEndScreen : TwScreen
     {
-        public TwGameEndScreen(MatchMachine machine, Action onSame, Action onNew, Action onMenu)
+        /// <param name="onSame">Null online, where there is no rematch button yet.</param>
+        /// <param name="onNew">Null online, where there is no rematch button yet.</param>
+        public TwGameEndScreen(IMatchView view, Action onSame, Action onNew, Action onMenu)
             : base("Game end", 1.5f, 0f)
         {
             Backdrop(1.1f, 1.15f);
             var names = new System.Collections.Generic.List<string>();
-            foreach (int player in machine.Leaders)
+            foreach (int player in view.Leaders)
             {
-                names.Add(machine.Settings.NameOf(player));
+                names.Add(view.NameOf(player));
             }
             new TwHeadline(T, TwCopy.GameOver, TwUi.Px(TwTokens.DisplayXl), new Vector3(0f, 0.46f, 0f));
             Heading(TwCopy.WinnerLine(string.Join(" & ", names.ToArray())), 0.32f, 0.95f);
-            Scoreboard(machine, 0.2f, 0.06f);
-            Button(TwCopy.PlayAgainSame, 0f, -0.34f, 0.8f, 0.1f, TwButton.Style.Primary, onSame);
-            Button(TwCopy.PlayAgainNew, 0f, -0.47f, 0.8f, 0.1f, TwButton.Style.Secondary, onNew);
-            Button(TwCopy.MainMenu, 0f, -0.58f, 0.3f, 0.07f, TwButton.Style.Ghost, onMenu);
+            Scoreboard(view, 0.2f, 0.06f);
+            if (onSame != null)
+            {
+                Button(TwCopy.PlayAgainSame, 0f, -0.34f, 0.8f, 0.1f, TwButton.Style.Primary, onSame);
+            }
+            if (onNew != null)
+            {
+                Button(TwCopy.PlayAgainNew, 0f, -0.47f, 0.8f, 0.1f, TwButton.Style.Secondary, onNew);
+            }
+            bool menuIsMain = onSame != null || onNew != null;
+            Button(view.IsOnline ? TwCopy.LeaveRoom : TwCopy.MainMenu, 0f, menuIsMain ? -0.58f : -0.4f,
+                menuIsMain ? 0.3f : 0.5f, menuIsMain ? 0.07f : 0.11f,
+                menuIsMain ? TwButton.Style.Ghost : TwButton.Style.Primary, onMenu);
         }
     }
 }

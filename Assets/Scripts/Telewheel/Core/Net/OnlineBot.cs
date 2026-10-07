@@ -43,10 +43,18 @@ namespace Telewheel
         /// <param name="seed">Makes the bot's pauses and choices repeatable.</param>
         /// <param name="drawing">What the bot hands in as its drawing; null or empty means a blank canvas.</param>
         public OnlineBot(INetClientPort port, PlayerProfile profile, int seed, Func<byte[]> drawing)
+            : this(new OnlineMatchClient(port, profile), seed, drawing)
         {
-            m_Client = new OnlineMatchClient(port, profile);
+        }
+
+        /// <summary>Plays through a client that already exists (for auto-play in place of the person).</summary>
+        public OnlineBot(OnlineMatchClient client, int seed, Func<byte[]> drawing)
+        {
+            m_Client = client;
             m_Random = new TwRandom(seed);
             m_Drawing = drawing;
+            DrawEarliest = 0f;
+            DrawLatest = 0.5f;
             m_Client.PhaseChanged += OnPhaseChanged;
         }
 
@@ -57,6 +65,14 @@ namespace Telewheel
 
         /// <summary>When true the bot stops acting (as a player who walked away from the headset).</summary>
         public bool Silent { get; set; }
+
+        /// <summary>
+        /// When in a draw turn the bot hands its drawing in, as fractions of the turn. Practice bots draw
+        /// late, so a person's own drawing is there for them to copy and the person gets a real picture to guess.
+        /// </summary>
+        public float DrawEarliest { get; set; }
+
+        public float DrawLatest { get; set; }
 
         public void Join()
         {
@@ -104,7 +120,8 @@ namespace Telewheel
                 case MatchPhase.Turn:
                     if (m_Client.TurnKind == StageKind.Draw)
                     {
-                        Plan(3f, Math.Max(4f, m_Client.Clock.Total * 0.5f), SubmitDrawing);
+                        float total = m_Client.Clock.Total;
+                        Plan(Math.Max(3f, total * DrawEarliest), Math.Max(4f, total * DrawLatest), SubmitDrawing);
                     }
                     else
                     {

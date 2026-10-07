@@ -31,12 +31,17 @@ namespace Telewheel
         public event Action<string> Changed;
         public event Action<string> Submitted;
 
+        private readonly int m_MaxLength;
+        private readonly bool m_LettersOnly;
         private string m_Text = string.Empty;
         private bool m_Listening;
         private bool m_PreviousShortcutsDisabled;
 
-        public TwKeyboard(Transform parent, Vector3 localPosition)
+        public TwKeyboard(
+            Transform parent, Vector3 localPosition, int maxLength = GuessNormalizer.MaxLength, bool lettersOnly = false)
         {
+            m_MaxLength = maxLength;
+            m_LettersOnly = lettersOnly;
             Root = new GameObject("Keyboard");
             Root.transform.SetParent(parent, false);
             Root.transform.localPosition = localPosition;
@@ -64,6 +69,14 @@ namespace Telewheel
         public string Text
         {
             get { return m_Text; }
+        }
+
+        /// <summary>Replaces what has been typed (for editing a saved value).</summary>
+        public void SetText(string text)
+        {
+            string value = text ?? string.Empty;
+            m_Text = value.Length > m_MaxLength ? value.Substring(0, m_MaxLength) : value;
+            RaiseChanged();
         }
 
         public void Clear()
@@ -132,7 +145,7 @@ namespace Telewheel
 
         private void Append(char c)
         {
-            if (m_Text.Length >= GuessNormalizer.MaxLength)
+            if (m_Text.Length >= m_MaxLength || (m_LettersOnly && !char.IsLetter(c)))
             {
                 return;
             }

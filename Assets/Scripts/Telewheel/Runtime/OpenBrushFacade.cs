@@ -210,7 +210,11 @@ namespace Telewheel
             }
         }
 
-        /// <summary>Switches between the passthrough environment and Open Brush's default virtual one.</summary>
+        /// <summary>
+        /// Switches between the passthrough environment and Open Brush's default virtual one. Returns
+        /// false when there is nothing to switch to, or Open Brush refused (it will not leave
+        /// passthrough while other players are in a multiplayer room).
+        /// </summary>
         public static bool SetPassthrough(bool on)
         {
             EnvironmentCatalog catalog = EnvironmentCatalog.m_Instance;
@@ -230,7 +234,43 @@ namespace Telewheel
                 return false;
             }
             SceneSettings.m_Instance.SetDesiredPreset(target, keepSceneTransform: true);
-            return true;
+            return SceneSettings.m_Instance.GetDesiredPreset() == target;
+        }
+
+        /// <summary>The names of the environments a host can pick for everyone (not passthrough, which is personal).</summary>
+        public static List<string> SelectableEnvironmentNames()
+        {
+            var names = new List<string>();
+            EnvironmentCatalog catalog = EnvironmentCatalog.m_Instance;
+            if (catalog != null)
+            {
+                foreach (TiltBrush.Environment env in catalog.AllEnvironments)
+                {
+                    if (!env.isPassthrough)
+                    {
+                        names.Add(env.name);
+                    }
+                }
+            }
+            return names;
+        }
+
+        /// <summary>Switches to the environment called <paramref name="name"/> (the host's pick). False if there is none.</summary>
+        public static bool ApplyEnvironment(string name)
+        {
+            EnvironmentCatalog catalog = EnvironmentCatalog.m_Instance;
+            if (catalog == null || SceneSettings.m_Instance == null || string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+            TiltBrush.Environment target = catalog.AllEnvironments.FirstOrDefault(
+                e => !e.isPassthrough && string.Equals(e.name, name, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                return false;
+            }
+            SceneSettings.m_Instance.SetDesiredPreset(target, keepSceneTransform: true);
+            return SceneSettings.m_Instance.GetDesiredPreset() == target;
         }
 
         /// <summary>True when the brush hand is the right hand (the wand, with the menu, is the left).</summary>

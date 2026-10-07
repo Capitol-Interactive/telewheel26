@@ -179,8 +179,16 @@ namespace Telewheel
             if (settings.AutoPlay)
             {
                 m_AutoPlay = new TwAutoPlay(m_Game, seed);
-                Log("AutoPlay is on: bots will play a match.");
-                m_Game.StartMatch(TwGame.DefaultSettings());
+                if (settings.FakeOnline)
+                {
+                    Log("AutoPlay is on: bots will play a practice online match.");
+                    m_Game.StartPracticeHost();
+                }
+                else
+                {
+                    Log("AutoPlay is on: bots will play a match.");
+                    m_Game.StartMatch(TwGame.DefaultSettings());
+                }
             }
             else
             {
@@ -195,7 +203,7 @@ namespace Telewheel
                 return;
             }
             // The test wipes the canvas, so it must not run in the middle of a match.
-            if (m_Game != null && m_Game.Machine != null)
+            if (m_Game != null && m_Game.InMatch)
             {
                 Log("The self-test only runs from the menus, not during a match.");
                 return;

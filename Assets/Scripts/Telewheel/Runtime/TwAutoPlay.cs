@@ -48,8 +48,7 @@ namespace Telewheel
 
         public void Tick(float dt)
         {
-            MatchMachine machine = m_Game.Machine;
-            if (m_Finished || machine == null)
+            if (m_Finished)
             {
                 return;
             }
@@ -58,63 +57,97 @@ namespace Telewheel
             {
                 return;
             }
-            switch (machine.Phase)
+            IMatchSession session = m_Game.Session;
+            if (session == null)
             {
+                return;
+            }
+            switch (session.Phase)
+            {
+                case MatchPhase.Lobby:
+                    PlayLobby();
+                    break;
                 case MatchPhase.Handoff:
-                    machine.ConfirmHandoff();
+                    session.ConfirmHandoff();
                     Pause(0.3f);
                     break;
                 case MatchPhase.Spin:
-                    PlaySpin(machine);
+                    PlaySpin(session);
                     break;
                 case MatchPhase.Countdown:
-                    machine.SkipCountdown();
+                    session.SkipCountdown();
                     Pause(0.3f);
                     break;
                 case MatchPhase.Turn:
-                    PlayTurn(machine);
+                    PlayTurn(session);
                     break;
                 case MatchPhase.Present:
-                    machine.SkipPresent();
+                    if (session.CanAdvancePresent)
+                    {
+                        session.SkipPresent();
+                    }
                     Pause(0.6f);
                     break;
                 case MatchPhase.Vote:
-                    machine.CastVote(0, m_Votes++ % 2 == 0);
+                    session.CastVote(m_Votes++ % 2 == 0);
                     Pause(0.5f);
                     break;
                 case MatchPhase.VoteResult:
-                    machine.ContinueAfterVote();
+                    session.ContinueAfterVote();
                     Pause(0.5f);
                     break;
                 case MatchPhase.RoundEnd:
-                    machine.ContinueRound();
+                    session.ContinueRound();
                     Pause(0.5f);
                     break;
                 case MatchPhase.GameEnd:
-                    Finish(machine);
+                    Finish(session);
                     break;
             }
         }
 
-        private void PlaySpin(MatchMachine machine)
+        // In a practice room the host (this player) starts once the computer players have all arrived.
+        private void PlayLobby()
         {
+            OnlineSession online = m_Game.Online;
+            if (online == null || !online.IsHost || online.Client.State != ClientState.Lobby)
+            {
+                return;
+            }
+            if (online.Room.CanStart && online.Client.Names.Count >= MatchSettings.MinPlayers + 2)
+            {
+                online.Room.Start();
+                Pause(1f);
+            }
+        }
+
+        private void PlaySpin(IMatchSession session)
+        {
+            if (session.LocalDone)
+            {
+                return;
+            }
             var spin = m_Game.Screen as TwSpinScreen;
             if (spin == null)
             {
                 return;
             }
-            if (machine.SpinWord == null)
+            if (session.SpinWord == null)
             {
                 spin.SpinNow();
                 return;
             }
-            machine.ConfirmSpin();
+            session.ConfirmSpin();
             Pause(0.3f);
         }
 
-        private void PlayTurn(MatchMachine machine)
+        private void PlayTurn(IMatchSession session)
         {
-            if (machine.CurrentStage.Kind == StageKind.Draw)
+            if (session.LocalDone)
+            {
+                return;
+            }
+            if (session.TurnKind == StageKind.Draw)
             {
                 if (!m_Game.IsDrawTurn)
                 {
@@ -130,7 +163,7 @@ namespace Telewheel
             }
             else
             {
-                machine.SubmitGuess(GuessWords[m_Random.NextInt(GuessWords.Length)]);
+                session.SubmitGuess(GuessWords[m_Random.NextInt(GuessWords.Length)]);
                 Pause(0.4f);
             }
         }
@@ -161,13 +194,13 @@ namespace Telewheel
             m_Delay = seconds;
         }
 
-        private void Finish(MatchMachine machine)
+        private void Finish(IMatchSession session)
         {
             m_Finished = true;
             var scores = new List<string>();
-            for (int i = 0; i < machine.Scores.Count; i++)
+            for (int i = 0; i < session.Scores.Count; i++)
             {
-                scores.Add(machine.Settings.NameOf(i) + " " + machine.Scores[i]);
+                scores.Add(session.NameOf(i) + " " + session.Scores[i]);
             }
             TwDirector.Instance.Log("AutoPlay finished: " + string.Join(", ", scores.ToArray()));
         }

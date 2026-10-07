@@ -21,6 +21,8 @@ namespace Telewheel
     {
         private const string MixedRealityKey = "telewheel.mixedReality";
         private const string RightHandedKey = "telewheel.rightHanded";
+        private const string PlayerNameKey = "telewheel.playerName";
+        private const string PlayerIconKey = "telewheel.playerIcon";
 
         /// <summary>Show passthrough instead of a virtual environment (when the device supports it).</summary>
         public static bool MixedReality
@@ -36,6 +38,23 @@ namespace Telewheel
             set { PlayerPrefs.SetInt(RightHandedKey, value ? 1 : 0); }
         }
 
+        /// <summary>The name and icon shown to other players online.</summary>
+        public static PlayerProfile Profile
+        {
+            get
+            {
+                return new PlayerProfile(
+                    PlayerPrefs.GetString(PlayerNameKey, string.Empty), PlayerPrefs.GetInt(PlayerIconKey, 0));
+            }
+        }
+
+        public static void SaveProfile(PlayerProfile profile)
+        {
+            PlayerPrefs.SetString(PlayerNameKey, PlayerProfile.CleanName(profile.Name));
+            PlayerPrefs.SetInt(PlayerIconKey, PlayerProfile.CleanIcon(profile.Icon));
+            PlayerPrefs.Save();
+        }
+
         /// <summary>Puts the saved settings into effect. Called once when the game starts.</summary>
         public static void Apply()
         {
@@ -47,13 +66,27 @@ namespace Telewheel
             }
         }
 
-        public static void SetMixedReality(bool on)
+        /// <summary>
+        /// Turns mixed reality on or off. Returns false (and leaves the setting as it was) when it
+        /// could not be switched, for instance when leaving it is not allowed with other players present.
+        /// </summary>
+        public static bool SetMixedReality(bool on)
         {
+            if (OpenBrushFacade.PassthroughSupported && !OpenBrushFacade.SetPassthrough(on))
+            {
+                return false;
+            }
             MixedReality = on;
             PlayerPrefs.Save();
+            return true;
+        }
+
+        /// <summary>Puts the player's own environment back (after a host's pick), mixed reality or the default.</summary>
+        public static void RestoreEnvironment()
+        {
             if (OpenBrushFacade.PassthroughSupported)
             {
-                OpenBrushFacade.SetPassthrough(on);
+                OpenBrushFacade.SetPassthrough(MixedReality);
             }
         }
 
