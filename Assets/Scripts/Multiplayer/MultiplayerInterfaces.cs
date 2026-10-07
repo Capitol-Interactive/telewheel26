@@ -40,6 +40,13 @@ namespace OpenBrush.Multiplayer
         bool GetPlayerRoomOwnershipStatus(int playerId);
         GameObject GetPlayerPrefab(int playerId);
         void SendLargeDataToPlayer(int playerId, byte[] largeData, int percentage);
+        // Telewheel: plain messages between players, for the game running on top of the room.
+        // They never touch the sketch. SendCustomData returns false if the player cannot be reached.
+        bool SendCustomData(int playerId, byte[] data);
+        IList<int> GetRemotePlayerIds();
+        void SetRoomOpen(bool open);
+        event Action<int, byte[]> CustomDataReceived;
+
         Task<bool> PerformCommand(BaseCommand command);
         Task<bool> SendCommandToPlayer(BaseCommand command, int playerId);
         Task<bool> CheckCommandReception(BaseCommand command, int playerId);

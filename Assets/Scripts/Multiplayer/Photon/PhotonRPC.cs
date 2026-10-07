@@ -177,6 +177,7 @@ namespace OpenBrush.Multiplayer
 
         private static void BaseCommand(Guid commandGuid, Guid parentGuid = default, int childCount = 0)
         {
+            if (SketchSharingBlocked()) return; // Telewheel
             if (CheckifCommandGuidIsInStack(commandGuid)) return;
 
             Debug.Log($"Base command child count: {childCount}");
@@ -200,6 +201,7 @@ namespace OpenBrush.Multiplayer
 
         private static void BrushStrokeFull(NetworkedStroke strokeData, Guid commandGuid, int timestamp, Guid parentGuid = default, int childCount = 0)
         {
+            if (SketchSharingBlocked()) return; // Telewheel
 
             if (CheckifCommandGuidIsInStack(commandGuid)) return;
 
@@ -222,6 +224,7 @@ namespace OpenBrush.Multiplayer
 
         private static void BrushStrokeBegin(Guid id, NetworkedStroke strokeData, int finalLength)
         {
+            if (SketchSharingBlocked()) return; // Telewheel
             var decode = NetworkedStroke.ToStroke(strokeData);
 
             decode.m_Type = Stroke.Type.NotCreated;
@@ -253,6 +256,7 @@ namespace OpenBrush.Multiplayer
 
         private static void BrushStrokeContinue(Guid id, int offset, NetworkedControlPoint[] controlPoints, bool[] dropPoints)
         {
+            if (SketchSharingBlocked()) return; // Telewheel
             if (!m_inProgressStrokes.ContainsKey(id))
             {
                 Debug.LogError("shouldn't be here!");
@@ -282,6 +286,7 @@ namespace OpenBrush.Multiplayer
 
         private static void BrushStrokeComplete(Guid id, Guid commandGuid, int timestamp, Guid parentGuid = default, int childCount = 0)
         {
+            if (SketchSharingBlocked()) return; // Telewheel
 
             if (CheckifCommandGuidIsInStack(commandGuid)) return;
 
@@ -330,6 +335,7 @@ namespace OpenBrush.Multiplayer
 
         private static void DeleteStroke(int seed, Guid commandGuid, int timestamp, Guid parentGuid = default, int childCount = 0)
         {
+            if (SketchSharingBlocked()) return; // Telewheel
             if (CheckifCommandGuidIsInStack(commandGuid)) return;
 
             // TODO : implment GUID for strokesdata.
@@ -364,6 +370,7 @@ namespace OpenBrush.Multiplayer
 
         private static void SwitchEnvironment(Guid environmentGuid, Guid commandGuid, int timestamp, Guid parentGuid = default, int childCount = 0)
         {
+            if (SketchSharingBlocked()) return; // Telewheel
             if (CheckifCommandGuidIsInStack(commandGuid)) return;
 
             TiltBrush.Environment environment = EnvironmentCatalog.m_Instance.GetEnvironment(environmentGuid);
@@ -432,6 +439,21 @@ namespace OpenBrush.Multiplayer
             MultiplayerManager.m_Instance.IsViewOnly = isEnabled;
         }
 
+        // Telewheel: while a game match is using the room, nobody else's strokes, undo or environment
+        // changes may touch this player's sketch.
+        private static bool SketchSharingBlocked()
+        {
+            return MultiplayerManager.m_Instance != null && MultiplayerManager.m_Instance.SuppressCommandSharing;
+        }
+
+        // Telewheel: only the room owner may kick, mute for everyone or set view-only. These used to
+        // trust any peer that sent the call.
+        private static bool SenderIsRoomOwner(RpcInfo info)
+        {
+            return MultiplayerManager.m_Instance != null
+                && MultiplayerManager.m_Instance.IsPlayerRoomOwner(info.Source.RawEncoded);
+        }
+
         private static void ReceiveManualColocationReference(
             NetworkManualColocationReference networkReference,
             PlayerRef source,
@@ -486,6 +508,7 @@ namespace OpenBrush.Multiplayer
         [Rpc(InvokeLocal = false)]
         public static void RPC_PerformCommand(NetworkRunner runner, string commandName, string guid, string[] data)
         {
+            if (SketchSharingBlocked()) return; // Telewheel
             Debug.Log($"Command recieved: {commandName}");
 
             if (commandName.Equals("TiltBrush.BrushStrokeCommand"))
@@ -517,6 +540,7 @@ namespace OpenBrush.Multiplayer
         [Rpc(InvokeLocal = false)]
         public static void RPC_Undo(NetworkRunner runner, string commandName)
         {
+            if (SketchSharingBlocked()) return; // Telewheel: it would pop this player's own undo stack
             if (SketchMemoryScript.m_Instance.CanUndo())
             {
                 SketchMemoryScript.m_Instance.StepBack(false);
@@ -526,6 +550,7 @@ namespace OpenBrush.Multiplayer
         [Rpc(InvokeLocal = false)]
         public static void RPC_Redo(NetworkRunner runner, string commandName)
         {
+            if (SketchSharingBlocked()) return; // Telewheel
             if (SketchMemoryScript.m_Instance.CanRedo())
             {
                 SketchMemoryScript.m_Instance.StepForward(false);
@@ -651,20 +676,23 @@ namespace OpenBrush.Multiplayer
         }
 
         [Rpc(InvokeLocal = false)]
-        public static void RPC_SetUserViewOnlyMode(NetworkRunner runner, bool value, [RpcTarget] PlayerRef targetPlayer)
+        public static void RPC_SetUserViewOnlyMode(NetworkRunner runner, bool value, [RpcTarget] PlayerRef targetPlayer, RpcInfo info = default)
         {
+            if (!SenderIsRoomOwner(info)) return; // Telewheel
             SetViewOnly(value);
         }
 
         [Rpc(InvokeLocal = false)]
-        public static void RPC_DisconnectRemoteUser(NetworkRunner runner,[RpcTarget] PlayerRef targetPlayer)
+        public static void RPC_DisconnectRemoteUser(NetworkRunner runner,[RpcTarget] PlayerRef targetPlayer, RpcInfo info = default)
         {
+            if (!SenderIsRoomOwner(info)) return; // Telewheel
             _ = MultiplayerManager.m_Instance.Disconnect();
         }
 
         [Rpc(InvokeLocal = false)]
-        public static void RPC_MutePlayer(NetworkRunner runner, bool mute, int playerId)
+        public static void RPC_MutePlayer(NetworkRunner runner, bool mute, int playerId, RpcInfo info = default)
         {
+            if (!SenderIsRoomOwner(info)) return; // Telewheel
             if (MultiplayerAudioSourcesManager.m_Instance != null)
             {
                 MultiplayerAudioSourcesManager.m_Instance.SetMuteForPlayer(playerId, mute);

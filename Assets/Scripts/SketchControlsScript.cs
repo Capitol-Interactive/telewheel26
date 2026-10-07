@@ -1714,7 +1714,7 @@ namespace TiltBrush
                 !m_GrabWand.grabbingWorld &&
                 !InputManager.m_Instance.GetCommand(InputManager.SketchCommands.Activate) &&
                 !SelectionManager.m_Instance.IsAnimatingTossFromGrabbingGroup &&
-                !(MultiplayerManager.m_Instance.State == ConnectionState.IN_ROOM);
+                !MultiplayerManager.m_Instance.IsSharingSketch; // Telewheel: a game match does not share the sketch
         }
 
         bool CanRedo()
@@ -1725,7 +1725,7 @@ namespace TiltBrush
                 !m_GrabBrush.grabbingWorld &&
                 !InputManager.m_Instance.GetCommand(InputManager.SketchCommands.Activate) &&
                 !SelectionManager.m_Instance.IsAnimatingTossFromGrabbingGroup &&
-                !(MultiplayerManager.m_Instance.State == ConnectionState.IN_ROOM);
+                !MultiplayerManager.m_Instance.IsSharingSketch; // Telewheel
         }
 
         bool ShouldRepeatUndo()
@@ -5615,10 +5615,10 @@ namespace TiltBrush
             // TODO: hide gallery view / publish if there are no saved sketches
             switch (rEnum)
             {
-                case GlobalCommands.Undo:
-                    return SketchMemoryScript.m_Instance.CanUndo() && !(MultiplayerManager.m_Instance.State == ConnectionState.IN_ROOM);
+                case GlobalCommands.Undo: // Telewheel: IsSharingSketch instead of "in a room"
+                    return SketchMemoryScript.m_Instance.CanUndo() && !MultiplayerManager.m_Instance.IsSharingSketch;
                 case GlobalCommands.Redo:
-                    return SketchMemoryScript.m_Instance.CanRedo() && !(MultiplayerManager.m_Instance.State == ConnectionState.IN_ROOM);
+                    return SketchMemoryScript.m_Instance.CanRedo() && !MultiplayerManager.m_Instance.IsSharingSketch;
                 case GlobalCommands.Save:
                     bool canSave =
                         SaveLoadScript.m_Instance.SceneFile.Valid &&
@@ -5656,7 +5656,7 @@ namespace TiltBrush
                         (VrAssetService.m_Instance.UploadProgress <= 0.0f) &&
                         IsCommandAvailable(GlobalCommands.UploadToGenericCloud);
                 case GlobalCommands.NewSketch:
-                    return SketchHasChanges() && !(MultiplayerManager.m_Instance.State == ConnectionState.IN_ROOM);
+                    return SketchHasChanges() && !MultiplayerManager.m_Instance.IsSharingSketch; // Telewheel
                 case GlobalCommands.Credits:
                 case GlobalCommands.AshleysSketch:
                     return !SketchHasChanges() && !SketchMemoryScript.m_Instance.IsMemoryDirty();

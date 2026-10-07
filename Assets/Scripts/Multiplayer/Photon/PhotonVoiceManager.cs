@@ -38,6 +38,8 @@ public class PhotonVoiceManager : IVoiceConnectionHandler, IConnectionCallbacks,
     private AppSettings m_PhotonVoiceAppSettings;
     private Recorder m_Recorder;
     private bool ConnectedToMaster = false;
+    private bool m_InitFailed = false; // Telewheel
+    private const int ConnectTimeoutMilliseconds = 10000; // Telewheel
     private bool wasTransmitting = false;
 #if UNITY_ANDROID
     private bool m_RequestingMicrophonePermission = false;
@@ -50,7 +52,7 @@ public class PhotonVoiceManager : IVoiceConnectionHandler, IConnectionCallbacks,
     public PhotonVoiceManager(MultiplayerManager manager)
     {
         m_Manager = manager;
-        Init();
+        m_InitFailed = !Init();
         isTransmitting = false;
     }
 
@@ -64,9 +66,16 @@ public class PhotonVoiceManager : IVoiceConnectionHandler, IConnectionCallbacks,
             if (m_VoiceConnection == null) throw new Exception("[PhotonVoiceManager] VoiceConnection component not found in scene");
             m_VoiceConnection.VoiceLogger.LogLevel = Photon.Voice.LogLevel.Error;
 
+            // Telewheel: say plainly what is missing instead of a NullReferenceException.
+            SecretsConfig.ServiceAuthData voiceSecrets = App.Config?.PhotonVoiceSecrets;
+            if (voiceSecrets == null || string.IsNullOrEmpty(voiceSecrets.ClientId))
+            {
+                throw new Exception("The Photon Voice app id is missing from the Secrets asset.");
+            }
+
             m_VoiceConnection.Settings = new AppSettings
             {
-                AppIdVoice = App.Config.PhotonVoiceSecrets.ClientId,
+                AppIdVoice = voiceSecrets.ClientId,
                 FixedRegion = "",
             };
 
@@ -96,16 +105,27 @@ public class PhotonVoiceManager : IVoiceConnectionHandler, IConnectionCallbacks,
     {
         State = ConnectionState.CONNECTING;
 
+        // Telewheel: if setup failed there is nothing to connect, and waiting would never end.
+        if (m_InitFailed || m_VoiceConnection == null)
+        {
+            State = ConnectionState.ERROR;
+            LastError = string.IsNullOrEmpty(LastError) ? "[PhotonVoiceManager] Voice is not set up." : LastError;
+            return false;
+        }
+
         m_VoiceConnection.Client.UserId = m_Manager.UserInfo.UserId;
 
         if (!m_VoiceConnection.Client.IsConnected)
         {
             //ControllerConsoleScript.m_Instance.AddNewLine("[PhotonVoiceManager] Attempting to connect Voice Server...");
             m_VoiceConnection.ConnectUsingSettings();
-            while (!ConnectedToMaster)
+            // Telewheel: give up after a while (this used to wait for ever if the connection never came).
+            int waited = 0;
+            while (!ConnectedToMaster && waited < ConnectTimeoutMilliseconds)
             {
                 //ControllerConsoleScript.m_Instance.AddNewLine("Waiting for Voice Connection to establish...");
                 await Task.Delay(100);
+                waited += 100;
             }
         }
 
@@ -236,9 +256,19 @@ public class PhotonVoiceManager : IVoiceConnectionHandler, IConnectionCallbacks,
         return EnableRecorderTransmission();
     }
 
+    // Telewheel: the scene's primary recorder was never assigned, so also look for a Recorder component.
+    private Recorder FindRecorder()
+    {
+        if (m_VoiceConnection == null) return null;
+        Recorder recorder = m_VoiceConnection.PrimaryRecorder;
+        if (recorder == null) recorder = m_VoiceConnection.GetComponentInChildren<Recorder>();
+        if (recorder == null) recorder = GameObject.FindFirstObjectByType<Recorder>();
+        return recorder;
+    }
+
     private bool EnableRecorderTransmission()
     {
-        m_Recorder = m_VoiceConnection.PrimaryRecorder;
+        m_Recorder = FindRecorder();
         if (m_Recorder == null)
         {
             ControllerConsoleScript.m_Instance.AddNewLine("Recorder not found! Ensure it's attached to a GameObject.");
@@ -306,6 +336,8 @@ public class PhotonVoiceManager : IVoiceConnectionHandler, IConnectionCallbacks,
 #if UNITY_ANDROID
         m_StartSpeakingWhenMicrophonePermissionGranted = false;
 #endif
+        // Telewheel: the recorder starts out transmitting, so it may not have been found yet.
+        if (m_Recorder == null) m_Recorder = FindRecorder();
         if (m_Recorder != null)
         {
             m_Recorder.TransmitEnabled = false;
@@ -414,6 +446,7 @@ public class PhotonVoiceManager : IVoiceConnectionHandler, IConnectionCallbacks,
 
     public void OnDisconnected(DisconnectCause cause)
     {
+        ConnectedToMaster = false; // Telewheel: or a reconnect would think it is still connected
         if (cause == DisconnectCause.None || cause == DisconnectCause.DisconnectByClientLogic || cause == DisconnectCause.ApplicationQuit)
         {
             return;

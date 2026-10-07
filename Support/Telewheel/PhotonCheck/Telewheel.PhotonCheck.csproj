@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Checks the exact Photon Fusion calls Telewheel's edits to Open Brush's multiplayer code rely on,
+       against the real SDK assemblies in Assets/Photon, so a wrong overload or property name is found
+       here instead of in the Unity editor. It needs the SDK (python3 Support/bin/setup-photon.py), so it
+       is not part of the CI build.
+       Run: dotnet build Support/Telewheel/PhotonCheck/Telewheel.PhotonCheck.csproj
+       Use -p:PhotonSdk=/path/to/Assets/Photon to check another copy of the SDK. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <PhotonSdk Condition="'$(PhotonSdk)' == ''">$(MSBuildThisFileDirectory)../../../Assets/Photon</PhotonSdk>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="PhotonSignatures.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" />
+    <Reference Include="Fusion.Runtime"><HintPath>$(PhotonSdk)/Fusion/Assemblies/Fusion.Runtime.dll</HintPath></Reference>
+    <Reference Include="Fusion.Sockets"><HintPath>$(PhotonSdk)/Fusion/Assemblies/Fusion.Sockets.dll</HintPath></Reference>
+    <Reference Include="Fusion.Common"><HintPath>$(PhotonSdk)/Fusion/Assemblies/Fusion.Common.dll</HintPath></Reference>
+    <Reference Include="Fusion.Realtime"><HintPath>$(PhotonSdk)/Fusion/Assemblies/Fusion.Realtime.dll</HintPath></Reference>
+    <Reference Include="Fusion.Log"><HintPath>$(PhotonSdk)/Fusion/Assemblies/Fusion.Log.dll</HintPath></Reference>
+    <Reference Include="PhotonClient"><HintPath>$(PhotonSdk)/PhotonLibs/netstandard2.0/release/PhotonClient.dll</HintPath></Reference>
+  </ItemGroup>
+
+</Project>
