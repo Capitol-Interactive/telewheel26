@@ -237,6 +237,7 @@ namespace Telewheel
                 return;
             }
             m_PressTimer = PressSeconds;
+            TwAudio.Play(TwSound.Click, 0.4f);
             Action handler = Clicked;
             if (handler != null)
             {

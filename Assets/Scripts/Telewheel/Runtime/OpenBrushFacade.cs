@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using OpenBrush.Multiplayer;
 using TiltBrush;
 using UnityEngine;
@@ -179,6 +180,60 @@ namespace Telewheel
         public static void ResetWorldPose()
         {
             App.Scene.Pose = TrTransform.identity;
+        }
+
+        // ----- Preferences: mixed reality, handedness, camera -----
+
+        /// <summary>True when this device can show passthrough (mixed reality).</summary>
+        public static bool PassthroughSupported
+        {
+            get { return App.VrSdk != null && App.VrSdk.PassthroughMode != PassthroughMode.None; }
+        }
+
+        public static bool IsPassthroughActive
+        {
+            get
+            {
+                TiltBrush.Environment env = SceneSettings.m_Instance == null
+                    ? null : SceneSettings.m_Instance.GetDesiredPreset();
+                return env != null && env.isPassthrough;
+            }
+        }
+
+        /// <summary>Switches between the passthrough environment and Open Brush's default virtual one.</summary>
+        public static bool SetPassthrough(bool on)
+        {
+            EnvironmentCatalog catalog = EnvironmentCatalog.m_Instance;
+            if (catalog == null || SceneSettings.m_Instance == null)
+            {
+                return false;
+            }
+            TiltBrush.Environment target = on
+                ? catalog.AllEnvironments.FirstOrDefault(e => e.isPassthrough)
+                : catalog.DefaultEnvironment;
+            if (target == null || (!on && target.isPassthrough))
+            {
+                target = catalog.AllEnvironments.FirstOrDefault(e => !e.isPassthrough);
+            }
+            if (target == null)
+            {
+                return false;
+            }
+            SceneSettings.m_Instance.SetDesiredPreset(target, keepSceneTransform: true);
+            return true;
+        }
+
+        /// <summary>True when the brush hand is the right hand (the wand, with the menu, is the left).</summary>
+        public static bool WandOnRight
+        {
+            get { return InputManager.m_Instance.WandOnRight; }
+            set { InputManager.m_Instance.WandOnRight = value; }
+        }
+
+        /// <summary>Switches to Open Brush's camera tool for taking a photo.</summary>
+        public static void EnablePhotoTool()
+        {
+            SketchSurfacePanel.m_Instance.EnableSpecificTool(BaseTool.ToolType.MultiCamTool);
         }
 
         // ----- Head and pointer -----

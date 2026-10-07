@@ -50,6 +50,26 @@ All gameplay code is in `Assets/Scripts/` (`TiltBrush` namespace). It is built a
 - **Other subsystems:** `Multiplayer/` (Photon Fusion; the CI pulls a specific Fusion branch), `Layers/`, `Playback/` (stroke replay), `Poly/`+`Sharing/` (Icosa/Sketchfab/Google services), `Tools/` (the in-app tools), `GUI/` (VR panels and popups), `TiltBrushCpp` (native plugin source).
 - **Editor tooling:** `Assets/Editor/` (build pipeline, brush/panel editors and audits such as `BrushAudioReactiveAudit`, `BrushUvExportAudit`, `ShaderStripping`). Python utilities are in `Support/bin/` and `Support/Python/`. CI is `.github/workflows/build.yml` (game-ci/unity-builder, `buildMethod: BuildTiltBrush.CommandLine`).
 
+## Telewheel (the game built on Open Brush)
+
+Telewheel is a VR telephone-Pictionary party game (spin a wheel for a word, draw it in 3D for 60s, the next player guesses it, and so on, then reveal and vote). It runs inside Open Brush: it restyles and trims Open Brush's UI rather than replacing it. Plain Open Brush is `--Telewheel.Enabled false`.
+
+- **`Assets/Scripts/Telewheel/Core/`** — game rules with no Unity references (`Telewheel.Core.asmdef`, `noEngineReferences`): `ChainPlanner` (who handles which chain on which turn), `MatchMachine` (the Pass & Play state machine), `WheelPhysics`, `WordDeck`, `VoteTally`, design tokens (`TwTokens`) and all player-facing text (`TwCopy`). Keep it engine-free so it can be unit-tested here.
+- **`Runtime/`** — Unity glue. `TwBootstrap` starts everything from `RuntimeInitializeOnLoadMethod` (no edit to `Main.unity`), `TwDirector` puts Open Brush into game mode and runs the game, `TwGame` maps match phases to screens, `TwSelfTest` checks every Open Brush hook in the running app. **All Open Brush internals are reached only through `OpenBrushFacade`**, so an Open Brush change breaks one file.
+- **`UI/`** — world-space UI built in code from the design system (no prefabs): `TwUi`/`TwGfx` builders, `TwButton`, `TwPointer` (VR controller ray, or screen centre on a desktop), the wheel, keyboard and `Tw*Screen` classes. Everything is sized in metres under a root scaled x10 (Open Brush units are decimetres).
+- **Edits to existing Open Brush files** are small and marked `// Telewheel`: `PanelManager` (a Telewheel panel-availability mode), `SketchControlsScript` (two hooks that repurpose Sketchbook as Submit, New Sketch as Clear), `UserConfig` (the `Telewheel` section), `ToolButton` (a getter), and `API/ApiMethods.Telewheel.cs`.
+- Drawings only exist as bytes between turns: a finished drawing is serialized, the canvas is wiped with Open Brush's own `NewSketch`, and later drawings are re-created display-only on a stage layer. The Marker brush is used for every drawing.
+- Design source of truth: the Telewheel design system artifact (tokens, components, voice) and the "Telewheel Components" Google Doc (rules). Colours, type and copy in `TwTokens`/`TwCopy` mirror them.
+
+**Testing Telewheel**
+- Logic tests (run anywhere with the .NET 8 SDK; the same sources run in the Unity Test Runner as `Assets/Tests/EditMode/Telewheel`): `dotnet test Support/Telewheel/Tests/Telewheel.Core.Tests.csproj`.
+- Compile check for the Unity-facing code without Unity (uses the real UnityEngine API from NuGet and stand-ins for Open Brush in `Support/Telewheel/CompileCheck/OpenBrushStubs.cs`; keep the stubs matching the real signatures): `dotnet build Support/Telewheel/CompileCheck/Telewheel.CompileCheck.csproj`.
+- New files made outside the editor need `.meta` files with unique GUIDs: `python3 Support/Python/telewheel_meta.py generate <folders>` then `... check`.
+- In the editor without a headset use desktop mode (`--Flags.EnableMonoscopicMode true`, or hold M while pressing Play). The on-screen overlay shows the game state and self-test; F8 re-runs the self-test, F9 hides the overlay, F10 opens the system menu. The self-test report is also written to `telewheel-selftest.txt` in the persistent data path and served by the HTTP API (`telewheel.state`, `telewheel.selftest.report`).
+- `--Telewheel.AutoPlay true --Telewheel.TimeScale 10 --Telewheel.Players 4 --Telewheel.Rounds 1` makes bots play a whole match unattended.
+- Word lists are `Assets/Resources/Telewheel/words_*.txt` (the raunchy list is a placeholder). Voice-over clips dropped into `Resources/Telewheel/Audio` as `vo_get_ready`, `vo_spin`, `vo_guess`, `vo_vote`, `vo_nailed`, `vo_drifted`, `vo_round_over`, `vo_game_over` play automatically.
+- Online play (lobbies, Photon) is not built; the "Play Online" button is disabled.
+
 ## Project rules (from AGENTS.md)
 
 - **Never commit or push temporary design, planning, or future-work documents.** Keep them untracked and local unless the user explicitly asks for them to be versioned.

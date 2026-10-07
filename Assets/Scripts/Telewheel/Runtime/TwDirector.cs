@@ -159,6 +159,9 @@ namespace Telewheel
                 m_SelfTestRunning = false;
             }
 
+            TwPrefs.Apply();
+            TwAudio.Init(gameObject);
+            TwFx.Init(gameObject);
             gameObject.AddComponent<TwPointer>();
             int seed = settings.Seed != 0 ? settings.Seed : System.Environment.TickCount;
             m_Game = new TwGame(this, Sketch, seed);
@@ -211,6 +214,10 @@ namespace Telewheel
             {
                 RunSelfTest();
             }
+            if (keyboard.f10Key.wasPressedThisFrame && m_Game != null)
+            {
+                m_Game.ToggleSystemMenu();
+            }
         }
 
         // ----- Repurposed Open Brush buttons -----
@@ -232,7 +239,10 @@ namespace Telewheel
                     }
                     return true;
                 case SketchControlsScript.GlobalCommands.ToggleSettings:
-                    Log("System menu pressed (not built yet).");
+                    if (m_Game != null)
+                    {
+                        m_Game.ToggleSystemMenu();
+                    }
                     return true;
                 default:
                     return false;

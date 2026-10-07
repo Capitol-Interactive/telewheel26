@@ -406,9 +406,14 @@ namespace TiltBrush
 
             bool? m_SelfTestOnStart;
             // Run the integration self-test when the game starts and show the result on screen.
+            // On by default in the editor and development builds, off in release builds.
             public bool SelfTestOnStart
             {
-                get { return m_SelfTestOnStart ?? true; }
+                get
+                {
+                    return m_SelfTestOnStart ??
+                        (UnityEngine.Application.isEditor || UnityEngine.Debug.isDebugBuild);
+                }
                 set { m_SelfTestOnStart = value; }
             }
 
@@ -450,10 +455,15 @@ namespace TiltBrush
             }
 
             bool? m_DebugOverlay;
-            // The on-screen debug panel with state and buttons for every action.
+            // The on-screen debug panel with the game state and self-test results.
+            // On by default in the editor and development builds, off in release builds.
             public bool DebugOverlay
             {
-                get { return m_DebugOverlay ?? true; }
+                get
+                {
+                    return m_DebugOverlay ??
+                        (UnityEngine.Application.isEditor || UnityEngine.Debug.isDebugBuild);
+                }
                 set { m_DebugOverlay = value; }
             }
         }

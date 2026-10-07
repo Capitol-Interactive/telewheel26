@@ -49,7 +49,7 @@ namespace Telewheel
             }
 
             GUILayout.BeginArea(new Rect(10f, 10f, Width, Screen.height - 20f), m_BoxStyle);
-            GUILayout.Label("<b>TELEWHEEL</b>  <i>F9 hide, F8 run self-test</i>", m_Style);
+            GUILayout.Label("<b>TELEWHEEL</b>  <i>F9 hide, F8 self-test, F10 menu</i>", m_Style);
             foreach (string line in director.OverlayLines())
             {
                 GUILayout.Label(line, m_Style);

@@ -55,6 +55,7 @@ namespace UnityEngine.InputSystem
         public static Keyboard current { get { return null; } }
         public KeyControl f8Key { get { return null; } }
         public KeyControl f9Key { get { return null; } }
+        public KeyControl f10Key { get { return null; } }
         public event Action<char> onTextInput;
     }
 }
@@ -117,6 +118,21 @@ namespace TiltBrush
         public void ClearLayerContents(CanvasScript c) { }
         public void ResetLayers(bool notify = false) { }
     }
+    public enum PassthroughMode { None, FBPassthrough, OpenXREnvionmentBlendMode, Zapbox }
+    public class VrSdk { public PassthroughMode PassthroughMode { get; private set; } }
+    public class Environment : ScriptableObject { public bool isPassthrough; }
+    public class EnvironmentCatalog : MonoBehaviour
+    {
+        public static EnvironmentCatalog m_Instance;
+        public IEnumerable<Environment> AllEnvironments { get { return null; } }
+        public Environment DefaultEnvironment { get { return null; } }
+    }
+    public class SceneSettings : MonoBehaviour
+    {
+        public static SceneSettings m_Instance;
+        public Environment GetDesiredPreset() { return null; }
+        public void SetDesiredPreset(Environment env, bool forceTransition = false, bool keepSceneTransform = false, bool hasCustomLights = false, bool skipFade = false) { }
+    }
     public class BrushColorController { public Color CurrentColor { get; set; } }
     public class BrushDescriptor : ScriptableObject { public Guid m_Guid; }
     public class BrushCatalog : MonoBehaviour
@@ -141,6 +157,7 @@ namespace TiltBrush
         public static Config Config { get { return null; } }
         public static SceneScript Scene { get { return null; } }
         public static BrushColorController BrushColor { get { return null; } }
+        public static VrSdk VrSdk { get { return null; } }
         public static AppState CurrentState { get { return AppState.Standard; } }
         public event Action<AppState, AppState> StateChanged;
     }
@@ -234,6 +251,7 @@ namespace TiltBrush
         public bool GetCommandDown(SketchCommands c) { return false; }
         public bool GetCommand(SketchCommands c) { return false; }
         public bool DisableKeyboardShortcuts { get; set; }
+        public bool WandOnRight { get; set; }
     }
     public class ViewpointScript : MonoBehaviour { public static Transform Head { get { return null; } } }
 }

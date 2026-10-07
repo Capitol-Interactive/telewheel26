@@ -35,9 +35,12 @@ namespace Telewheel
         private MatchMachine m_Machine;
         private MatchSettings m_PendingSettings;
         private TwScreen m_Screen;
+        private TwScreen m_Overlay;
         private float m_TimeScale = 1f;
         private int m_PresentShown = -1;
+        private int m_LastWholeSecond = -1;
         private bool m_EndingDrawTurn;
+        private bool m_TitleConfettiShown;
 
         public TwGame(TwDirector director, TwSketchService sketch, int seed)
         {
@@ -90,13 +93,81 @@ namespace Telewheel
         {
             AbandonMatch();
             Prepare(neutral: true);
-            SetScreen(new TwMainMenuScreen(ShowSetup, () => m_Director.Log("Settings screen is not built yet.")));
+            SetScreen(new TwMainMenuScreen(ShowSetup, ShowSettings));
+            if (!m_TitleConfettiShown)
+            {
+                // Confetti belongs to the title screen and the reveal, and only the first time.
+                m_TitleConfettiShown = true;
+                TwFx.Confetti(TwUi.PointInFront(1.5f, 0.45f));
+            }
+        }
+
+        public void ShowSettings()
+        {
+            Prepare(neutral: true);
+            SetScreen(new TwSettingsScreen(ShowMainMenu));
+        }
+
+        /// <summary>Opens the system menu on top of whatever is showing, or closes it.</summary>
+        public void ToggleSystemMenu()
+        {
+            if (m_Overlay != null)
+            {
+                CloseSystemMenu();
+                return;
+            }
+            bool inMatch = m_Machine != null;
+            m_Overlay = new TwSystemMenuScreen(
+                inMatch, IsDrawTurn, OpenPreferencesFromMenu, TakePhoto, ExitMatchFromMenu, CloseSystemMenu);
+        }
+
+        private void CloseSystemMenu()
+        {
+            if (m_Overlay != null)
+            {
+                m_Overlay.Dispose();
+                m_Overlay = null;
+            }
+        }
+
+        private void OpenPreferencesFromMenu()
+        {
+            CloseSystemMenu();
+            if (m_Machine == null)
+            {
+                ShowSettings();
+            }
+            else
+            {
+                // Mid-match the preferences open over the game rather than replacing it.
+                m_Overlay = new TwSettingsScreen(CloseSystemMenu);
+            }
+        }
+
+        private void TakePhoto()
+        {
+            CloseSystemMenu();
+            if (IsDrawTurn)
+            {
+                OpenBrushFacade.EnablePhotoTool();
+            }
+        }
+
+        private void ExitMatchFromMenu()
+        {
+            CloseSystemMenu();
+            ExitMatch();
         }
 
         public void ShowSetup()
         {
             Prepare(neutral: true);
             MatchSettings settings = m_PendingSettings ?? DefaultSettings();
+            if (OpenBrushFacade.Settings.Seed == 0)
+            {
+                // A fresh seed for each match, so a rematch does not repeat the same words.
+                settings.Seed = System.Environment.TickCount;
+            }
             m_PendingSettings = settings;
             SetScreen(new TwSetupScreen(settings, StartMatch, ShowMainMenu));
         }
@@ -170,16 +241,22 @@ namespace Telewheel
                 {
                     ShowPresentItem();
                 }
+                PlayClockSounds();
             }
             if (m_Screen != null)
             {
                 m_Screen.Tick(scaled);
+            }
+            if (m_Overlay != null)
+            {
+                m_Overlay.Tick(scaled);
             }
         }
 
         public void Dispose()
         {
             AbandonMatch();
+            CloseSystemMenu();
             DisposeScreen();
             m_Floor.Destroy();
         }
@@ -208,18 +285,22 @@ namespace Telewheel
 
         private void OnPhaseChanged(MatchPhase from, MatchPhase to)
         {
+            m_LastWholeSecond = -1;
             switch (to)
             {
                 case MatchPhase.Handoff:
                     Prepare(neutral: true);
                     ShowHandoff();
+                    TwAudio.Play(TwSound.Whoosh, 0.4f);
                     break;
                 case MatchPhase.Spin:
                     Prepare(neutral: true);
                     SetScreen(new TwSpinScreen(m_Machine, m_UiRandom, OnWheelStopped, OnSpinConfirmed));
+                    TwAudio.PlayVoice("vo_spin");
                     break;
                 case MatchPhase.Countdown:
                     BeginDrawTurn();
+                    TwAudio.PlayVoice("vo_get_ready");
                     break;
                 case MatchPhase.Turn:
                     if (m_Machine.CurrentStage.Kind == StageKind.Draw)
@@ -229,10 +310,12 @@ namespace Telewheel
                             BeginDrawTurn();
                         }
                         StartDrawing();
+                        TwAudio.Play(TwSound.Go, 0.5f);
                     }
                     else
                     {
                         BeginGuessTurn();
+                        TwAudio.PlayVoice("vo_guess");
                     }
                     break;
                 case MatchPhase.Present:
@@ -243,19 +326,60 @@ namespace Telewheel
                 case MatchPhase.Vote:
                     Prepare(neutral: true);
                     SetScreen(new TwVoteScreen(m_Machine, vote => m_Machine.CastVote(0, vote)));
+                    TwAudio.PlayVoice("vo_vote");
                     break;
                 case MatchPhase.VoteResult:
                     Prepare(neutral: true);
                     SetScreen(new TwVoteResultScreen(m_Machine, m_Machine.ContinueAfterVote));
+                    if (m_Machine.LastVoteLanded)
+                    {
+                        TwAudio.Play(TwSound.Ding, 0.6f);
+                        TwAudio.PlayVoice("vo_nailed");
+                        TwFx.Confetti(TwUi.PointInFront(1.6f, 0.35f));
+                    }
+                    else
+                    {
+                        TwAudio.Play(TwSound.Buzz, 0.5f);
+                        TwAudio.PlayVoice("vo_drifted");
+                    }
                     break;
                 case MatchPhase.RoundEnd:
                     Prepare(neutral: true);
                     SetScreen(new TwRoundEndScreen(m_Machine, m_Machine.ContinueRound));
+                    TwAudio.Play(TwSound.Fanfare, 0.5f);
+                    TwAudio.PlayVoice("vo_round_over");
                     break;
                 case MatchPhase.GameEnd:
                     Prepare(neutral: true);
                     SetScreen(new TwGameEndScreen(m_Machine, PlayAgainSame, PlayAgainNew, ShowMainMenu));
+                    TwAudio.Play(TwSound.Fanfare, 0.6f);
+                    TwAudio.PlayVoice("vo_game_over");
+                    TwFx.Confetti(TwUi.PointInFront(1.5f, 0.4f), 140);
                     break;
+            }
+        }
+
+        // Beeps for the last three seconds of the countdown and ticks for the last five of a turn.
+        private void PlayClockSounds()
+        {
+            TurnClock clock = m_Machine.Clock;
+            int whole = clock.WholeSeconds;
+            if (whole == m_LastWholeSecond)
+            {
+                return;
+            }
+            m_LastWholeSecond = whole;
+            if (whole <= 0)
+            {
+                return;
+            }
+            if (m_Machine.Phase == MatchPhase.Countdown && whole <= 3)
+            {
+                TwAudio.Play(TwSound.Beep, 0.5f);
+            }
+            else if (m_Machine.Phase == MatchPhase.Turn && clock.Warning && whole <= 5)
+            {
+                TwAudio.Play(TwSound.Tick, 0.5f);
             }
         }
 
@@ -350,6 +474,8 @@ namespace Telewheel
             {
                 byte[] drawing = m_Sketch.Capture();
                 m_Director.Log("Drawing saved: " + drawing.Length + " bytes.");
+                TwFx.Poof(TwUi.PointInFront(1.4f, 0.0f));
+                TwAudio.Play(TwSound.Poof, 0.6f);
                 m_Machine.SubmitDrawing(drawing);
             }
             m_EndingDrawTurn = false;
@@ -385,6 +511,7 @@ namespace Telewheel
                 return;
             }
             m_PresentShown = m_Machine.PresentIndex;
+            TwAudio.Play(TwSound.Pop, 0.5f);
             PresentItem item = m_Machine.CurrentPresentItem;
             m_Sketch.Clear();
             if (item.Kind == PresentItemKind.Drawing)
@@ -433,6 +560,11 @@ namespace Telewheel
         {
             DisposeScreen();
             m_Screen = screen;
+        }
+
+        public bool SystemMenuOpen
+        {
+            get { return m_Overlay != null; }
         }
 
         private void DisposeScreen()

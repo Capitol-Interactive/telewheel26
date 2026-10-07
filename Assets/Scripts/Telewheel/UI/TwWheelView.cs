@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System;
 using UnityEngine;
 
 namespace Telewheel
@@ -38,6 +39,7 @@ namespace Telewheel
         private float m_BulbClock;
         private int m_Winner = -1;
         private float m_WinnerPulse;
+        private int m_LastSegment;
 
         public TwWheelView(Transform parent, Vector3 localPosition, float radiusMeters, int segments)
         {
@@ -103,6 +105,9 @@ namespace Telewheel
 
             Apply();
         }
+
+        /// <summary>Raised each time a new segment passes the pointer while the wheel is moving.</summary>
+        public event Action Ticked;
 
         public bool Spinning
         {
@@ -194,6 +199,17 @@ namespace Telewheel
         {
             Spin.Step(dt);
             Apply();
+
+            int segment = Spin.CurrentSegment;
+            if (segment != m_LastSegment)
+            {
+                m_LastSegment = segment;
+                Action handler = Ticked;
+                if (Spinning && handler != null)
+                {
+                    handler();
+                }
+            }
 
             // Chase the marquee bulbs while spinning, otherwise a slow twinkle.
             m_BulbClock += dt * (Spinning ? 18f : 3f);

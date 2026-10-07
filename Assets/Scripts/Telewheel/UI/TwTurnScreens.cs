@@ -55,6 +55,7 @@ namespace Telewheel
 
             m_Wheel = new TwWheelView(T, new Vector3(0f, 0.04f, 0f), 0.38f, machine.Settings.WheelSegments);
             m_Wheel.Spin.Stopped += OnWheelStopped;
+            m_Wheel.Ticked += () => TwAudio.Play(TwSound.Tick, 0.35f);
 
             m_SpinButton = Button(TwCopy.Spin, 0f, -0.5f, 0.46f, 0.12f, TwButton.Style.Primary, SpinNow);
 
