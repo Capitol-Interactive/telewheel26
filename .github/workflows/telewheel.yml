@@ -10,6 +10,8 @@ on:  # yamllint disable-line rule:truthy
       - 'Support/Telewheel/**'
       - 'Support/Python/telewheel_meta.py'
       - 'Support/bin/setup-photon.py'
+      - 'Assets/Scripts/Multiplayer/**'
+      - 'Assets/Scripts/SketchControlsScript.cs'
       - 'Assets/Editor/TelewheelPhotonSetup.cs'
       - 'ProjectSettings/ProjectSettings.asset'
       - '.github/workflows/telewheel.yml'
@@ -38,6 +40,16 @@ jobs:
         run: >-
           dotnet build --no-incremental Telewheel.CompileCheck.csproj
           -p:DefineConstants=MP_PHOTON
+      - name: Open Brush's multiplayer files parse, with and without Photon
+        # Unity compiles them, and only with the SDK, so CI checks syntax.
+        run: |
+          M=Assets/Scripts/Multiplayer
+          FILES="$M/*.cs $M/Photon/*.cs"
+          FILES="$FILES Assets/Scripts/SketchControlsScript.cs"
+          FILES="$FILES Assets/Scripts/UserConfig.cs"
+          P="dotnet run --project Support/Telewheel/SyntaxCheck --"
+          $P "" $FILES
+          $P "MP_PHOTON;FUSION_WEAVER;UNITY_ANDROID" $FILES
       - name: The Photon setup script runs
         run: python3 -I Support/bin/setup-photon.py defines
       - name: MP_PHOTON must not be committed in the project settings
