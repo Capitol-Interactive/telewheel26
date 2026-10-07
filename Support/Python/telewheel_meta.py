@@ -37,10 +37,7 @@ guid: {guid}
 folderAsset: yes
 DefaultImporter:
   externalObjects: {{}}
-  userData:
-  assetBundleName:
-  assetBundleVariant:
-"""
+{footer}"""
 
 _SCRIPT_META = """fileFormatVersion: 2
 guid: {guid}
@@ -50,30 +47,46 @@ MonoImporter:
   defaultReferences: []
   executionOrder: {order}
   icon: {{instanceID: 0}}
-  userData:
-  assetBundleName:
-  assetBundleVariant:
-"""
+{footer}"""
 
 _ASMDEF_META = """fileFormatVersion: 2
 guid: {guid}
 AssemblyDefinitionImporter:
   externalObjects: {{}}
-  userData:
-  assetBundleName:
-  assetBundleVariant:
-"""
+{footer}"""
 
 _TEXT_META = """fileFormatVersion: 2
 guid: {guid}
 TextScriptImporter:
   externalObjects: {{}}
-  userData:
-  assetBundleName:
-  assetBundleVariant:
-"""
+{footer}"""
+
+_FONT_META = """fileFormatVersion: 2
+guid: {guid}
+TrueTypeFontImporter:
+  externalObjects: {{}}
+  serializedVersion: 4
+  fontSize: 16
+  forceTextureCase: -2
+  characterSpacing: 0
+  characterPadding: 1
+  includeFontData: 1
+  fontName: {font_name}
+  fontNames:
+  - {font_name}
+  fallbackFontReferences: []
+  customCharacters:{space}
+  fontRenderingMode: 0
+  ascentCalculationMode: 1
+  useLegacyBoundsCalculation: 0
+  shouldRoundAdvanceValue: 1
+{footer}"""
 
 _TEXT_EXTENSIONS = (".json", ".txt", ".md")
+
+# Unity writes a trailing space after these empty keys; spelled out here so no source line
+# ends in whitespace.
+_FOOTER = "  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
 _GUID_RE = re.compile(r"^guid: ([0-9a-f]{32})\s*$", re.MULTILINE)
 
 
@@ -113,6 +126,8 @@ def _template_for(path, is_dir):
         return _ASMDEF_META
     if path.endswith(_TEXT_EXTENSIONS):
         return _TEXT_META
+    if path.endswith(".ttf"):
+        return _FONT_META
     return None
 
 
@@ -125,27 +140,42 @@ def _new_guid(used):
             return guid
 
 
+def _paths_under(top):
+    """Return `top` and everything below it (files and folders)."""
+    paths = [top]
+    for dirpath, dirnames, filenames in os.walk(top):
+        paths.extend(os.path.join(dirpath, name) for name in dirnames)
+        paths.extend(os.path.join(dirpath, name) for name in filenames)
+    return sorted(paths)
+
+
+def _meta_content(path, template, used):
+    """Fill a .meta template for `path` with a fresh GUID."""
+    font_name = os.path.splitext(os.path.basename(path))[0].replace("-", " ")
+    return template.format(
+        guid=_new_guid(used),
+        order=0,
+        font_name=font_name,
+        footer=_FOOTER,
+        space=" ",
+    )
+
+
 def generate(project_root, roots):
     """Create missing .meta files under `roots`. Returns (created, skipped)."""
     used = collect_guids(project_root)
     created = []
     skipped = []
     for root in roots:
-        top = os.path.join(project_root, root)
-        paths = [top]
-        for dirpath, dirnames, filenames in os.walk(top):
-            paths.extend(os.path.join(dirpath, name) for name in dirnames)
-            paths.extend(os.path.join(dirpath, name) for name in filenames)
-        for path in sorted(paths):
+        for path in _paths_under(os.path.join(project_root, root)):
             if path.endswith(".meta") or os.path.exists(path + ".meta"):
                 continue
             template = _template_for(path, os.path.isdir(path))
             if template is None:
                 skipped.append(path)
                 continue
-            content = template.format(guid=_new_guid(used), order=0)
             with open(path + ".meta", "w", encoding="utf-8", newline="\n") as handle:
-                handle.write(content)
+                handle.write(_meta_content(path, template, used))
             created.append(path + ".meta")
     return created, skipped
 

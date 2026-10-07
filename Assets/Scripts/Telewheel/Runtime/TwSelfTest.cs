@@ -127,7 +127,7 @@ namespace Telewheel
             var sketch = new TwSketchService();
             Check(report, "Show saved drawing", () =>
             {
-                int shown = sketch.Show(saved, TwLayout.StageCenterMeters, TwLayout.StageSizeMeters);
+                int shown = sketch.Show(saved, TwLayout.ToUnits(TwLayout.StageCenterMeters), TwLayout.StageSizeMeters);
                 return shown == 1 && sketch.IsShowing && sketch.StageStrokeCount == 1
                     ? "1 stroke on the stage" : "shown " + shown + ", on stage " + sketch.StageStrokeCount;
             }, null);

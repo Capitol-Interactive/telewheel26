@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Compiles the Unity-facing Telewheel code outside Unity, against the real UnityEngine API and
+       hand-written stand-ins for Open Brush, TextMeshPro and Input System (OpenBrushStubs.cs).
+       It catches typos, type errors and wrong call shapes; it cannot catch a stand-in that no
+       longer matches Open Brush, so keep the stubs in step with the real signatures.
+       Run: dotnet build Support/Telewheel/CompileCheck/Telewheel.CompileCheck.csproj -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>CS0067;CS0649;CS0169;CS0414</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../../Assets/Scripts/Telewheel/Runtime/**/*.cs" />
+    <Compile Include="../../../Assets/Scripts/Telewheel/UI/**/*.cs" />
+    <Compile Include="../../../Assets/Scripts/Telewheel/Net/**/*.cs" />
+    <Compile Include="../../../Assets/Scripts/API/ApiMethods.Telewheel.cs" />
+    <Compile Include="OpenBrushStubs.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" />
+    <ProjectReference Include="../Core/Telewheel.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -50,10 +50,11 @@ namespace Telewheel
         }
 
         /// <summary>
-        /// Shows a saved drawing fitted into a box of <paramref name="sizeMeters"/> centred on
-        /// <paramref name="centerMeters"/>. Replaces whatever was shown. Returns the stroke count.
+        /// Shows a saved drawing fitted into a box of <paramref name="sizeMeters"/> centred on the
+        /// world position <paramref name="worldCenter"/> (in Open Brush units). Replaces whatever
+        /// was shown. Returns the stroke count.
         /// </summary>
-        public int Show(byte[] drawing, Vector3 centerMeters, float sizeMeters)
+        public int Show(byte[] drawing, Vector3 worldCenter, float sizeMeters)
         {
             Clear();
             System.Collections.Generic.List<Stroke> strokes = OpenBrushFacade.ReadStrokes(drawing);
@@ -62,7 +63,7 @@ namespace Telewheel
                 return 0;
             }
             return OpenBrushFacade.ShowStrokesOnStage(
-                strokes, TwLayout.ToUnits(centerMeters), TwLayout.ToUnits(sizeMeters), out m_Stage);
+                strokes, worldCenter, TwLayout.ToUnits(sizeMeters), out m_Stage);
         }
     }
 }
