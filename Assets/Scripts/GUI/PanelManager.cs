@@ -176,7 +176,8 @@ namespace TiltBrush
             Beginner,
             Advanced,
             ViewOnly,
-            Multiplayer
+            Multiplayer,
+            Telewheel // Telewheel: the trimmed game UI (colour picker, simple tools, system menu).
         }
 
         public enum PaneVisualsState
@@ -403,6 +404,9 @@ namespace TiltBrush
                 case PanelAvailabilityMode.Multiplayer:
                     return data.m_MapKey.m_Multiplayer && IsPanelInEditingLevel(data,
                         PlayerPrefs.GetInt(kPlayerPrefAdvancedMode, 0) == 1);
+                case PanelAvailabilityMode.Telewheel: // Telewheel
+                    return data.m_MapKey.m_Basic && IsTelewheelPanel(data.m_Panel.Type) &&
+                        IsPanelInEditingLevel(data, advancedPanels: false);
                 default:
                     return false;
             }
@@ -417,7 +421,44 @@ namespace TiltBrush
         private bool IsTemporaryPanelAvailabilityMode(PanelAvailabilityMode mode)
         {
             return mode == PanelAvailabilityMode.ViewOnly ||
-                mode == PanelAvailabilityMode.Multiplayer;
+                mode == PanelAvailabilityMode.Multiplayer ||
+                mode == PanelAvailabilityMode.Telewheel; // Telewheel
+        }
+
+        // Telewheel: the only panels the game keeps. Brushes, sketchbook, settings and the
+        // advanced tool panels are hidden (the match uses one brush; Submit replaces the sketchbook).
+        private static bool IsTelewheelPanel(BasePanel.PanelType type)
+        {
+            switch (type)
+            {
+                case BasePanel.PanelType.Color:
+                case BasePanel.PanelType.ToolsBasic:
+                case BasePanel.PanelType.ToolsBasicMobile:
+                case BasePanel.PanelType.AdminPanel:
+                case BasePanel.PanelType.AdminPanelMobile:
+                case BasePanel.PanelType.MemoryWarning:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        // Telewheel: when set, the trimmed Telewheel panel set stays in force whatever else asks
+        // for a different availability mode (multiplayer rooms, restoring the editing mode).
+        private bool m_TelewheelMode;
+        public bool TelewheelMode { get { return m_TelewheelMode; } }
+
+        public void SetTelewheelMode(bool enabled)
+        {
+            m_TelewheelMode = enabled;
+            if (enabled)
+            {
+                SetPanelAvailabilityMode(PanelAvailabilityMode.Telewheel);
+            }
+            else
+            {
+                RestoreEditingPanelAvailabilityMode();
+            }
         }
 
         public void SetPanelAvailabilityMode(PanelAvailabilityMode mode)
@@ -452,6 +493,11 @@ namespace TiltBrush
 
         public void RestoreEditingPanelAvailabilityMode()
         {
+            if (m_TelewheelMode) // Telewheel
+            {
+                SetPanelAvailabilityMode(PanelAvailabilityMode.Telewheel);
+                return;
+            }
             if (MultiplayerManager.m_Instance != null &&
                 MultiplayerManager.m_Instance.State == ConnectionState.IN_ROOM)
             {
@@ -466,7 +512,8 @@ namespace TiltBrush
 
         void OnMultiplayerStateUpdated(ConnectionState state)
         {
-            if (m_PanelAvailabilityMode == PanelAvailabilityMode.ViewOnly)
+            if (m_PanelAvailabilityMode == PanelAvailabilityMode.ViewOnly ||
+                m_TelewheelMode) // Telewheel
             {
                 return;
             }

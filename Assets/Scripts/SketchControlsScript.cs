@@ -4516,6 +4516,11 @@ namespace TiltBrush
         public void IssueGlobalCommand(GlobalCommands rEnum, int iParam1 = -1,
                                        int iParam2 = -1, string sParam = null)
         {
+            // Telewheel: the game repurposes a few buttons (Sketchbook becomes Submit, ...).
+            if (global::Telewheel.TwHooks.TryHandleGlobalCommand(rEnum))
+            {
+                return;
+            }
             switch (rEnum)
             {
 
@@ -5601,6 +5606,12 @@ namespace TiltBrush
 
         public bool IsCommandAvailable(GlobalCommands rEnum, int iParam = -1)
         {
+            // Telewheel: commands the game repurposes are available when the game says so.
+            bool telewheelAvailable;
+            if (global::Telewheel.TwHooks.TryGetCommandAvailable(rEnum, out telewheelAvailable))
+            {
+                return telewheelAvailable;
+            }
             // TODO: hide gallery view / publish if there are no saved sketches
             switch (rEnum)
             {

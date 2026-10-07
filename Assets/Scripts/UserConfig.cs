@@ -391,6 +391,74 @@ namespace TiltBrush
         }
         public DemoConfig Demo;
 
+        // Telewheel: settings for the Telewheel game mode. Set on the command line as
+        // e.g. --Telewheel.AutoPlay true --Telewheel.TimeScale 10
+        [Serializable]
+        public struct TelewheelConfig
+        {
+            bool? m_Enabled;
+            // Turn Telewheel off to get plain Open Brush.
+            public bool Enabled
+            {
+                get { return m_Enabled ?? true; }
+                set { m_Enabled = value; }
+            }
+
+            bool? m_SelfTestOnStart;
+            // Run the integration self-test when the game starts and show the result on screen.
+            public bool SelfTestOnStart
+            {
+                get { return m_SelfTestOnStart ?? true; }
+                set { m_SelfTestOnStart = value; }
+            }
+
+            bool? m_AutoPlay;
+            // Bots play a whole match unattended (for testing without a headset).
+            public bool AutoPlay
+            {
+                get { return m_AutoPlay ?? false; }
+                set { m_AutoPlay = value; }
+            }
+
+            float? m_TimeScale;
+            // Multiplies the game clocks. Handy with AutoPlay.
+            public float TimeScale
+            {
+                get { return m_TimeScale ?? 1f; }
+                set { m_TimeScale = value; }
+            }
+
+            int? m_Players;
+            public int Players
+            {
+                get { return m_Players ?? 4; }
+                set { m_Players = value; }
+            }
+
+            int? m_Rounds;
+            public int Rounds
+            {
+                get { return m_Rounds ?? 2; }
+                set { m_Rounds = value; }
+            }
+
+            int? m_Seed;
+            public int Seed
+            {
+                get { return m_Seed ?? 0; }
+                set { m_Seed = value; }
+            }
+
+            bool? m_DebugOverlay;
+            // The on-screen debug panel with state and buttons for every action.
+            public bool DebugOverlay
+            {
+                get { return m_DebugOverlay ?? true; }
+                set { m_DebugOverlay = value; }
+            }
+        }
+        public TelewheelConfig Telewheel;
+
         [Serializable]
         public struct BrushConfig
         {
