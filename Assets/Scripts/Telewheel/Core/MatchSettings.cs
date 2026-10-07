@@ -56,6 +56,12 @@ namespace Telewheel
         /// <summary>Extra time after a turn's clock for the drawing to reach the host.</summary>
         public float TurnGraceSeconds = 3f;
 
+        /// <summary>
+        /// How long the host waits for every player to receive a turn's prompt (a drawing can be large)
+        /// before starting the clock anyway.
+        /// </summary>
+        public float TurnLoadSeconds = 30f;
+
         /// <summary>Optional display names; missing entries fall back to "Player N".</summary>
         public string[] PlayerNames = new string[0];
 
@@ -92,7 +98,7 @@ namespace Telewheel
             }
             if (DrawSeconds <= 0 || GuessSeconds <= 0 || CountdownSeconds < 0
                 || PresentItemSeconds <= 0 || PresentFinalSeconds <= 0 || VoteResultSeconds < 0
-                || SpinSeconds <= 0 || RoundEndSeconds < 0 || TurnGraceSeconds < 0)
+                || SpinSeconds <= 0 || RoundEndSeconds < 0 || TurnGraceSeconds < 0 || TurnLoadSeconds <= 0)
             {
                 throw new ArgumentException("Durations must be positive");
             }

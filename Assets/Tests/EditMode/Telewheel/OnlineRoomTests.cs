@@ -541,6 +541,189 @@ namespace Telewheel.Tests
             Assert.Greater(c.StepVersion, afterOther, "someone leaving changes it too");
         }
 
+        // ----- Waiting for everyone's prompt before the clock starts -----
+
+        // A player whose app answers only when the test says so: it never sends TurnReady by itself.
+        private sealed class RawPlayer
+        {
+            public readonly INetClientPort Port;
+            public readonly int Peer;
+            public readonly List<NetMessage> Received = new List<NetMessage>();
+
+            public RawPlayer(Rig rig, string name)
+            {
+                Peer = rig.Net.Connect(out Port);
+                Port.FromHost += Received.Add;
+                Port.SendToHost(NetMessage.Hello(name, 0, OnlineRoomHost.ProtocolVersion));
+                rig.Step(0f);
+            }
+
+            public void SpinAndReady()
+            {
+                Port.SendToHost(NetMessage.SpinResult(0));
+                Port.SendToHost(NetMessage.Ready());
+            }
+        }
+
+        // Starts a three-player match (two bots and a raw player) and runs until the first turn is loading.
+        private static RawPlayer StartUntilLoading(Rig rig)
+        {
+            var raw = new RawPlayer(rig, "Slow");
+            rig.Begin();
+            raw.SpinAndReady();
+            Assert.IsTrue(rig.RunUntil(() => rig.HostBot.Client.IsLoadingTurn, 120f), "the first turn never began loading");
+            return raw;
+        }
+
+        [Test]
+        public void TheClockDoesNotStartUntilEveryoneHasTheirPrompt()
+        {
+            var rig = new Rig().WithPlayers(2);
+            RawPlayer raw = StartUntilLoading(rig);
+            for (int i = 0; i < 80; i++)
+            {
+                rig.Step(0.25f); // 20 seconds pass; the slow player has not answered.
+            }
+            Assert.IsTrue(rig.HostBot.Client.IsLoadingTurn, "everyone is still waiting for the slow player");
+            Assert.AreNotEqual(MatchPhase.Countdown, rig.HostBot.Client.Phase);
+            Assert.AreEqual(rig.Room.Settings.TurnLoadSeconds, rig.Room.Match.Clock.Total, 0.001f,
+                "the drawing clock has not started; only the wait for prompts is running");
+
+            raw.Port.SendToHost(NetMessage.TurnReady(0));
+            rig.Step(0f);
+            Assert.IsFalse(rig.HostBot.Client.IsLoadingTurn);
+            Assert.AreEqual(MatchPhase.Countdown, rig.HostBot.Client.Phase);
+            float expected = rig.Room.Settings.CountdownSeconds + rig.Room.Settings.DrawSeconds
+                + rig.Room.Settings.TurnGraceSeconds;
+            Assert.AreEqual(expected, rig.Room.Match.Clock.Total, 0.001f, "now the real turn clock runs");
+        }
+
+        [Test]
+        public void ASlowPromptDoesNotHoldTheRoomForever()
+        {
+            var rig = new Rig().WithPlayers(2);
+            StartUntilLoading(rig);
+            Assert.IsTrue(
+                rig.RunUntil(() => rig.HostBot.Client.Phase == MatchPhase.Countdown, rig.Room.Settings.TurnLoadSeconds + 5f),
+                "the host must start the turn when the wait for prompts runs out");
+        }
+
+        [Test]
+        public void SomeoneLeavingWhileTheTurnLoadsDoesNotHoldItUp()
+        {
+            var rig = new Rig().WithPlayers(2);
+            RawPlayer raw = StartUntilLoading(rig);
+            rig.Net.Disconnect(raw.Peer);
+            rig.Step(0f);
+            Assert.AreEqual(MatchPhase.Countdown, rig.HostBot.Client.Phase);
+        }
+
+        [Test]
+        public void WorkHandedInBeforeTheGoIsNotCounted()
+        {
+            var rig = new Rig().WithPlayers(2);
+            RawPlayer raw = StartUntilLoading(rig);
+            raw.Port.SendToHost(NetMessage.SubmitDrawing(new byte[] { 1, 2, 3 }));
+            rig.Step(0f);
+            Assert.AreEqual(0, rig.Room.Match.Chains.Sum(c => c.Entries.Count));
+        }
+
+        [Test]
+        public void ATurnReadyForTheWrongTurnDoesNotCount()
+        {
+            var rig = new Rig().WithPlayers(2);
+            RawPlayer raw = StartUntilLoading(rig);
+            raw.Port.SendToHost(NetMessage.TurnReady(5));
+            rig.Step(0f);
+            Assert.IsTrue(rig.HostBot.Client.IsLoadingTurn);
+        }
+
+        // ----- Measuring the connection -----
+
+        [Test]
+        public void TheLinkTestSendsEachGuestEachSizeAndTimesTheReplies()
+        {
+            var rig = new Rig().WithPlayers(4);
+            var changes = 0;
+            rig.Room.LinkTestChanged += () => changes++;
+            rig.Room.RunLinkTest(new[] { 100, 50000 });
+            Assert.IsTrue(rig.Room.LinkTestRunning);
+            Assert.IsTrue(rig.RunUntil(() => !rig.Room.LinkTestRunning, 60f));
+            IReadOnlyList<LinkTestResult> results = rig.Room.LinkTestResults;
+            Assert.AreEqual(6, results.Count, "three guests, two sizes each");
+            foreach (int seat in new[] { 1, 2, 3 })
+            {
+                CollectionAssert.AreEqual(
+                    new[] { 100, 50000 }, results.Where(r => r.Seat == seat).Select(r => r.Bytes).ToArray());
+            }
+            Assert.IsFalse(results.Any(r => r.Seat == 0), "the host's own connection is not a network link");
+            Assert.IsTrue(results.All(r => r.Seconds >= 0f));
+            Assert.Greater(changes, 1);
+        }
+
+        [Test]
+        public void TheLinkTestCanBeRunAgainAndNeverAfterTheStart()
+        {
+            var rig = new Rig().WithPlayers(2);
+            rig.Room.RunLinkTest(new[] { 10 });
+            rig.RunUntil(() => !rig.Room.LinkTestRunning, 30f);
+            Assert.AreEqual(1, rig.Room.LinkTestResults.Count);
+            rig.Room.RunLinkTest(new[] { 10, 20 });
+            rig.RunUntil(() => !rig.Room.LinkTestRunning, 30f);
+            Assert.AreEqual(2, rig.Room.LinkTestResults.Count, "a new run replaces the old results");
+            rig.Begin();
+            rig.Room.RunLinkTest(new[] { 10 });
+            Assert.IsFalse(rig.Room.LinkTestRunning, "no test once the match has started");
+        }
+
+        // ----- Ids that the transport reuses -----
+
+        private sealed class FakeHostPort : INetHostPort
+        {
+            public readonly List<KeyValuePair<int, NetMessage>> Sent = new List<KeyValuePair<int, NetMessage>>();
+
+            public event Action<int, NetMessage> FromPeer;
+
+            public event Action<int> PeerLeft;
+
+            public void SendToPeer(int peer, NetMessage message)
+            {
+                Sent.Add(new KeyValuePair<int, NetMessage>(peer, message));
+            }
+
+            public void Raise(int peer, NetMessage message)
+            {
+                FromPeer(peer, message);
+            }
+
+            public void RaiseLeft(int peer)
+            {
+                PeerLeft(peer);
+            }
+        }
+
+        [Test]
+        public void ANewPlayerWithTheIdOfSomeoneWhoLeftIsTurnedAway()
+        {
+            var port = new FakeHostPort();
+            var words = new List<string>();
+            for (int i = 0; i < 40; i++)
+            {
+                words.Add("w" + i);
+            }
+            var room = new OnlineRoomHost(port, new MatchSettings(), new PlayerProfile("Host", 0), f => words);
+            port.Raise(5, NetMessage.Hello("A", 0, OnlineRoomHost.ProtocolVersion));
+            port.Raise(6, NetMessage.Hello("B", 1, OnlineRoomHost.ProtocolVersion));
+            Assert.IsTrue(room.Start(), room.StartProblem);
+            port.RaiseLeft(5);
+            port.Sent.Clear();
+            port.Raise(5, NetMessage.Hello("Newcomer", 2, OnlineRoomHost.ProtocolVersion));
+            KeyValuePair<int, NetMessage> reply = port.Sent.Single(m => m.Key == 5);
+            Assert.AreEqual(NetKind.Rejected, reply.Value.Kind);
+            Assert.AreEqual((int)RejectReason.MatchStarted, reply.Value.A);
+            Assert.AreEqual(3, room.Members.Count);
+        }
+
         // ----- Waiting for others -----
 
         [Test]

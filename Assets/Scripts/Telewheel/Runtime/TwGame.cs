@@ -349,7 +349,8 @@ namespace Telewheel
         private void ShowLobby()
         {
             Prepare(neutral: true);
-            SetScreen(new TwLobbyScreen(m_Online, StartOnlineMatch, ExitMatch));
+            SetScreen(new TwLobbyScreen(
+                m_Online, StartOnlineMatch, ExitMatch, TwOnline.PracticeVisible ? (Action)RunLinkTest : null));
         }
 
         private void StartOnlineMatch()
@@ -362,6 +363,42 @@ namespace Telewheel
             {
                 ShowToast(m_Online.Room.StartProblem);
             }
+        }
+
+        // A developer tool: sends each guest drawings-sized blobs and logs how fast they came back, so
+        // the real connection's limits are measured rather than guessed.
+        private void RunLinkTest()
+        {
+            if (m_Online == null || !m_Online.IsHost || m_Online.Room.LinkTestRunning)
+            {
+                return;
+            }
+            OnlineRoomHost room = m_Online.Room;
+            room.LinkTestChanged -= OnLinkTestChanged;
+            room.LinkTestChanged += OnLinkTestChanged;
+            room.RunLinkTest(new[] { 5 * 1024, 50 * 1024, 250 * 1024, 500 * 1024 });
+            ShowToast(room.LinkTestRunning ? TwCopy.TestingLink : "Nobody else is in the room to test with.");
+        }
+
+        private void OnLinkTestChanged()
+        {
+            if (m_Online == null || m_Online.Room.LinkTestRunning)
+            {
+                return;
+            }
+            float slowest = float.MaxValue;
+            foreach (LinkTestResult result in m_Online.Room.LinkTestResults)
+            {
+                m_Director.Log("Link test: " + result.Name + " " + (result.Bytes / 1024) + " KB in "
+                    + result.Seconds.ToString("0.00") + " s (" + result.KilobytesPerSecond.ToString("0") + " KB/s)");
+                if (result.Bytes >= 250 * 1024 && result.KilobytesPerSecond > 0f)
+                {
+                    slowest = Mathf.Min(slowest, result.KilobytesPerSecond);
+                }
+            }
+            ShowToast(slowest < float.MaxValue
+                ? "Link test done. Slowest big transfer: " + slowest.ToString("0") + " KB/s (see the log)."
+                : "Link test done (see the log).");
         }
 
         private void OnClientStateChanged()
@@ -466,6 +503,10 @@ namespace Telewheel
                 client.StateChanged -= OnClientStateChanged;
                 client.PlayerLeft -= OnPlayerLeft;
                 client.EnvironmentChanged -= OnEnvironmentChanged;
+                if (m_Online.Room != null)
+                {
+                    m_Online.Room.LinkTestChanged -= OnLinkTestChanged;
+                }
                 m_Online.Leave();
                 m_Online = null;
                 if (m_HostEnvironmentApplied)

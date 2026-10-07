@@ -84,6 +84,9 @@ namespace Telewheel
         /// <summary>Seats that have not finished the current step (empty when nobody is being waited for).</summary>
         IReadOnlyList<int> WaitingFor { get; }
 
+        /// <summary>The next turn's prompt is in but the host has not started the clock yet (drawings are being passed round).</summary>
+        bool IsLoadingTurn { get; }
+
         /// <summary>Goes up whenever <see cref="WaitingFor"/> may have changed, so a screen need not rebuild it every frame.</summary>
         int StepVersion { get; }
     }

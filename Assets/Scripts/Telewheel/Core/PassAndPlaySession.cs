@@ -180,6 +180,11 @@ namespace Telewheel
             get { return 0; }
         }
 
+        public bool IsLoadingTurn
+        {
+            get { return false; }
+        }
+
         public void Tick(float dt)
         {
             m_Machine.Tick(dt);

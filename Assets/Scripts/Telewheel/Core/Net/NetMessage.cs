@@ -30,6 +30,12 @@ namespace Telewheel
         /// <summary>First message a player sends: who they are. Everything else waits for the welcome.</summary>
         Hello = 7,
 
+        /// <summary>The player has this turn's data and is ready to start.</summary>
+        TurnReady = 8,
+
+        /// <summary>Answer to a link test blob: its length.</summary>
+        LinkTestReply = 9,
+
         // Host to players.
         PhaseChanged = 20,
         WheelWords = 21,
@@ -45,6 +51,12 @@ namespace Telewheel
         Environment = 31,
         Progress = 32,
         MatchEnded = 33,
+
+        /// <summary>Everyone has their data: the turn clock starts now.</summary>
+        TurnGo = 34,
+
+        /// <summary>A blob of a chosen size, to measure how fast the connection carries data.</summary>
+        LinkTest = 35,
     }
 
     /// <summary>Why the host turned a player away.</summary>
@@ -242,7 +254,30 @@ namespace Telewheel
             return new NetMessage { Kind = NetKind.MatchEnded, A = (int)reason };
         }
 
+        /// <summary>The host starts turn <paramref name="turn"/>'s clock; everyone has their data.</summary>
+        public static NetMessage TurnGo(int turn)
+        {
+            return new NetMessage { Kind = NetKind.TurnGo, A = turn };
+        }
+
+        /// <summary>A test blob of <paramref name="data"/> bytes; <paramref name="id"/> pairs it with its reply.</summary>
+        public static NetMessage LinkTest(int id, byte[] data)
+        {
+            return new NetMessage { Kind = NetKind.LinkTest, A = id, Data = data };
+        }
+
         // ----- Player to host (continued) -----
+
+        /// <summary>This player has received turn <paramref name="turn"/>'s prompt and can start.</summary>
+        public static NetMessage TurnReady(int turn)
+        {
+            return new NetMessage { Kind = NetKind.TurnReady, A = turn };
+        }
+
+        public static NetMessage LinkTestReply(int id, int length)
+        {
+            return new NetMessage { Kind = NetKind.LinkTestReply, A = id, B = length };
+        }
 
         /// <summary>Introduces a player to the room. <paramref name="version"/> is the protocol version.</summary>
         public static NetMessage Hello(string name, int icon, int version)

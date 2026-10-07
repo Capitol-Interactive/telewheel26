@@ -69,6 +69,8 @@ namespace Telewheel
 
         private int m_Turn;
         private bool[] m_Submitted;
+        private bool[] m_TurnReady;
+        private bool m_Loading;
 
         private int m_PresentChain;
         private int m_PresentIndex;
@@ -177,6 +179,7 @@ namespace Telewheel
             }
             m_Gone[seat] = true;
             AutoPlayGonePlayers();
+            CheckTurnReady();
         }
 
         public void Start()
@@ -250,15 +253,22 @@ namespace Telewheel
                         CheckSpinDone();
                     }
                     break;
+                case NetKind.TurnReady:
+                    if (m_Phase == OnlinePhase.Turn && m_Loading && message.A == m_Turn)
+                    {
+                        m_TurnReady[from] = true;
+                        CheckTurnReady();
+                    }
+                    break;
                 case NetKind.SubmitDrawing:
-                    if (m_Phase == OnlinePhase.Turn && m_Planner.KindOfTurn(m_Turn) == StageKind.Draw)
+                    if (m_Phase == OnlinePhase.Turn && !m_Loading && m_Planner.KindOfTurn(m_Turn) == StageKind.Draw)
                     {
                         byte[] drawing = message.Data ?? new byte[0];
                         Submit(from, drawing.Length > MaxDrawingBytes ? new byte[0] : drawing, null);
                     }
                     break;
                 case NetKind.SubmitGuess:
-                    if (m_Phase == OnlinePhase.Turn && m_Planner.KindOfTurn(m_Turn) == StageKind.Guess)
+                    if (m_Phase == OnlinePhase.Turn && !m_Loading && m_Planner.KindOfTurn(m_Turn) == StageKind.Guess)
                     {
                         string guess = GuessNormalizer.Normalize(message.Text);
                         Submit(from, null, guess.Length == 0 ? TwCopy.NoGuess : guess);
@@ -337,11 +347,15 @@ namespace Telewheel
         {
             m_Turn = turn;
             m_Submitted = new bool[m_Names.Count];
+            m_TurnReady = new bool[m_Names.Count];
             StageKind kind = m_Planner.KindOfTurn(turn);
             float countdown = kind == StageKind.Draw ? m_Settings.CountdownSeconds : 0f;
             float seconds = kind == StageKind.Draw ? m_Settings.DrawSeconds : m_Settings.GuessSeconds;
             SetPhase(OnlinePhase.Turn);
-            m_Clock.Start(countdown + seconds + m_Settings.TurnGraceSeconds);
+            // The clock does not run while the prompts (drawings can be big) are on their way: players
+            // say when they have theirs, and only then does the host say go.
+            m_Loading = true;
+            m_Clock.Start(m_Settings.TurnLoadSeconds);
             for (int p = 0; p < m_Names.Count; p++)
             {
                 ChainState chain = m_Chains[m_Planner.ChainForTurn(p, turn)];
@@ -358,6 +372,34 @@ namespace Telewheel
                 SendTo(p, NetMessage.TurnStart(turn, kind, countdown, seconds, prompt, promptDrawing));
             }
             AutoPlayGonePlayers();
+            CheckTurnReady();
+        }
+
+        // Starts the turn's clock once everyone (leavers count) has their prompt, or the wait ran out.
+        private void CheckTurnReady()
+        {
+            if (m_Phase != OnlinePhase.Turn || !m_Loading)
+            {
+                return;
+            }
+            for (int p = 0; p < m_Names.Count; p++)
+            {
+                if (!m_TurnReady[p] && !m_Gone[p])
+                {
+                    return;
+                }
+            }
+            StartTurnClock();
+        }
+
+        private void StartTurnClock()
+        {
+            m_Loading = false;
+            StageKind kind = m_Planner.KindOfTurn(m_Turn);
+            float countdown = kind == StageKind.Draw ? m_Settings.CountdownSeconds : 0f;
+            float seconds = kind == StageKind.Draw ? m_Settings.DrawSeconds : m_Settings.GuessSeconds;
+            m_Clock.Start(countdown + seconds + m_Settings.TurnGraceSeconds);
+            SendTo(Everyone, NetMessage.TurnGo(m_Turn));
         }
 
         private void Submit(int player, byte[] drawing, string text)
@@ -388,6 +430,7 @@ namespace Telewheel
 
         private void EndTurn()
         {
+            m_Loading = false;
             if (m_Turn + 1 < m_Planner.TurnsPerChain)
             {
                 BeginTurn(m_Turn + 1);
@@ -522,7 +565,15 @@ namespace Telewheel
                     CheckSpinDone();
                     break;
                 case OnlinePhase.Turn:
-                    FillMissingSubmissions();
+                    if (m_Loading)
+                    {
+                        // Someone is slow to get their prompt; start anyway rather than hold everyone.
+                        StartTurnClock();
+                    }
+                    else
+                    {
+                        FillMissingSubmissions();
+                    }
                     break;
                 case OnlinePhase.Present:
                     AdvancePresent();

@@ -35,6 +35,7 @@ namespace Telewheel.Tests
             public bool Silent;
             public readonly List<NetMessage> Received = new List<NetMessage>();
             private readonly OnlineMatchHost m_Host;
+            private NetMessage m_PendingTurn;
 
             public Bot(OnlineMatchHost host, int seat)
             {
@@ -56,13 +57,18 @@ namespace Telewheel.Tests
                         m_Host.Receive(Seat, NetMessage.Ready());
                         break;
                     case NetKind.TurnStart:
-                        if (message.B == (int)StageKind.Draw)
+                        // Say the prompt is in; the work starts when the host says go.
+                        m_PendingTurn = message;
+                        m_Host.Receive(Seat, NetMessage.TurnReady(message.A));
+                        break;
+                    case NetKind.TurnGo:
+                        if (m_PendingTurn.B == (int)StageKind.Draw)
                         {
-                            m_Host.Receive(Seat, NetMessage.SubmitDrawing(new[] { (byte)Seat, (byte)message.A }));
+                            m_Host.Receive(Seat, NetMessage.SubmitDrawing(new[] { (byte)Seat, (byte)m_PendingTurn.A }));
                         }
                         else
                         {
-                            m_Host.Receive(Seat, NetMessage.SubmitGuess("guess " + Seat + " " + message.A));
+                            m_Host.Receive(Seat, NetMessage.SubmitGuess("guess " + Seat + " " + m_PendingTurn.A));
                         }
                         break;
                     case NetKind.PresentItem:
@@ -339,6 +345,16 @@ namespace Telewheel.Tests
             room.Host.Receive(0, NetMessage.SubmitGuess("wrong kind"));
             room.Host.Pump();
             Assert.AreEqual(0, room.Host.Chains.Sum(c => c.Entries.Count));
+
+            // Before the host has said go, a drawing is too early and does not count.
+            room.Host.Receive(0, NetMessage.SubmitDrawing(new byte[] { 9 }));
+            room.Host.Pump();
+            Assert.AreEqual(0, room.Host.Chains.Sum(c => c.Entries.Count));
+            for (int p = 0; p < 3; p++)
+            {
+                room.Host.Receive(p, NetMessage.TurnReady(0));
+            }
+            room.Host.Pump();
 
             // A second drawing from the same player does not count twice.
             room.Host.Receive(0, NetMessage.SubmitDrawing(new byte[] { 1 }));

@@ -33,6 +33,20 @@ namespace Telewheel
         public bool Left;
     }
 
+    /// <summary>How one blob of a link test fared: how many bytes went to a guest and how long the reply took.</summary>
+    public sealed class LinkTestResult
+    {
+        public int Seat;
+        public string Name;
+        public int Bytes;
+        public float Seconds;
+
+        public float KilobytesPerSecond
+        {
+            get { return Seconds > 0f ? Bytes / 1024f / Seconds : 0f; }
+        }
+    }
+
     /// <summary>
     /// The host's side of a room: who has joined, the rules, and then the match. It sits between the
     /// transport and <see cref="OnlineMatchHost"/>: it welcomes players, turns peer ids into seats,
@@ -44,7 +58,7 @@ namespace Telewheel
         public const int LocalPeer = 0;
 
         /// <summary>Bumped when the wire format changes; players on another version are turned away.</summary>
-        public const int ProtocolVersion = 1;
+        public const int ProtocolVersion = 2;
 
         private readonly INetHostPort m_Port;
         private readonly MatchSettings m_Settings;
@@ -52,7 +66,12 @@ namespace Telewheel
         private readonly List<RoomMember> m_Members = new List<RoomMember>();
         private readonly LocalLink m_Local;
 
+        private readonly List<LinkTestResult> m_LinkResults = new List<LinkTestResult>();
+        private readonly Dictionary<int, LinkTestState> m_LinkStates = new Dictionary<int, LinkTestState>();
+
         private OnlineMatchHost m_Match;
+        private float m_Time;
+        private int m_LinkSerial;
         private string m_Environment = string.Empty;
         private string m_StartProblem = string.Empty;
         private bool m_Closed;
@@ -82,6 +101,19 @@ namespace Telewheel
 
         /// <summary>Raised when someone joins or leaves, or the rules change.</summary>
         public event Action RosterChanged;
+
+        /// <summary>Raised whenever a link test result comes in or the test finishes.</summary>
+        public event Action LinkTestChanged;
+
+        public IReadOnlyList<LinkTestResult> LinkTestResults
+        {
+            get { return m_LinkResults; }
+        }
+
+        public bool LinkTestRunning
+        {
+            get { return m_LinkStates.Count > 0; }
+        }
 
         /// <summary>The host's own connection to the room. Hand it to an <see cref="OnlineMatchClient"/>.</summary>
         public INetClientPort LocalPort
@@ -173,6 +205,31 @@ namespace Telewheel
             m_Local.Deliver(NetMessage.Environment(m_Environment));
         }
 
+        /// <summary>
+        /// Sends each guest blobs of the given sizes, one after another, and records how long each took to
+        /// come back. It measures what the real connection carries, so the game's data budget rests on
+        /// numbers. Only before the match starts; running it again starts over.
+        /// </summary>
+        public void RunLinkTest(int[] sizes)
+        {
+            if (m_Match != null || m_Closed || sizes == null || sizes.Length == 0)
+            {
+                return;
+            }
+            m_LinkResults.Clear();
+            m_LinkStates.Clear();
+            foreach (RoomMember member in m_Members)
+            {
+                if (member.Peer != LocalPeer && !member.Left)
+                {
+                    var state = new LinkTestState { Sizes = sizes, Member = member };
+                    m_LinkStates[member.Peer] = state;
+                    SendLinkBlob(state);
+                }
+            }
+            RaiseLinkTestChanged();
+        }
+
         /// <summary>Starts the match. Returns false, and says why in <see cref="StartProblem"/>, if it cannot.</summary>
         public bool Start()
         {
@@ -221,6 +278,7 @@ namespace Telewheel
         /// <summary>Runs the match clock and delivers what the host's own player is owed. Call every frame.</summary>
         public void Tick(float dt)
         {
+            m_Time += dt;
             if (!m_Closed && m_Match != null)
             {
                 m_Match.Tick(dt);
@@ -246,10 +304,69 @@ namespace Telewheel
             {
                 m_Match.Receive(member.Seat, message);
             }
+            else if (member != null && m_Match == null && message.Kind == NetKind.LinkTestReply)
+            {
+                OnLinkTestReply(member, message);
+            }
+        }
+
+        private void OnLinkTestReply(RoomMember member, NetMessage reply)
+        {
+            LinkTestState state;
+            if (!m_LinkStates.TryGetValue(member.Peer, out state) || reply.A != state.Id)
+            {
+                return;
+            }
+            m_LinkResults.Add(new LinkTestResult
+            {
+                Seat = member.Seat,
+                Name = member.Name,
+                Bytes = state.Sizes[state.Index],
+                Seconds = m_Time - state.SentAt,
+            });
+            state.Index++;
+            if (state.Index < state.Sizes.Length)
+            {
+                SendLinkBlob(state);
+            }
+            else
+            {
+                m_LinkStates.Remove(member.Peer);
+            }
+            RaiseLinkTestChanged();
+        }
+
+        private void SendLinkBlob(LinkTestState state)
+        {
+            state.Id = ++m_LinkSerial;
+            state.SentAt = m_Time;
+            // Random bytes, so compression cannot make the connection look faster than it is.
+            var random = new TwRandom(state.Id);
+            var blob = new byte[Math.Max(0, state.Sizes[state.Index])];
+            for (int i = 0; i < blob.Length; i++)
+            {
+                blob[i] = (byte)random.NextInt(256);
+            }
+            SendTo(state.Member.Peer, NetMessage.LinkTest(state.Id, blob));
+        }
+
+        private void RaiseLinkTestChanged()
+        {
+            Action handler = LinkTestChanged;
+            if (handler != null)
+            {
+                handler();
+            }
         }
 
         private void OnHello(int peer, RoomMember existing, NetMessage message)
         {
+            if (existing != null && existing.Left)
+            {
+                // A new player with the id of one who left (the transport reuses them): not that member.
+                SendTo(peer, NetMessage.Rejected(RejectReason.MatchStarted));
+                return;
+            }
             if (existing != null)
             {
                 // Someone changing their mind about their name, or the host's own player checking in.
@@ -434,6 +551,15 @@ namespace Telewheel
                 }
             }
             return false;
+        }
+
+        private sealed class LinkTestState
+        {
+            public int[] Sizes;
+            public RoomMember Member;
+            public int Index;
+            public int Id;
+            public float SentAt;
         }
 
         /// <summary>

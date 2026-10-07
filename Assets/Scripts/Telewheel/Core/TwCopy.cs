@@ -110,6 +110,9 @@ namespace Telewheel
         public const string ResultsComing = "Final results in a moment.";
         public const string NextRoundComing = "Next round in a moment.";
         public const string HereWeGo = "Here we go...";
+        public const string PassingDrawings = "Passing the drawings...";
+        public const string TestLink = "TEST LINK";
+        public const string TestingLink = "Testing the connection...";
         public const string Okay = "OK";
         public const string PracticeNote = "Practice room: the other players are computer players.";
         public const string PracticeRoomTitle = "PRACTICE ROOM";

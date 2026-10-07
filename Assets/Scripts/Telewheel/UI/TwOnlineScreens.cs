@@ -233,7 +233,8 @@ namespace Telewheel
         private GameObject m_Dynamic;
         private int m_Version = -1;
 
-        public TwLobbyScreen(OnlineSession session, Action onStart, Action onLeave)
+        /// <param name="onTestLink">Shows a TEST LINK button for the host (a developer tool); null hides it.</param>
+        public TwLobbyScreen(OnlineSession session, Action onStart, Action onLeave, Action onTestLink = null)
             : base("Lobby", 1.5f, 0f)
         {
             m_Session = session;
@@ -248,6 +249,10 @@ namespace Telewheel
             {
                 m_Start = Button(TwCopy.Start, 0f, -0.4f, 0.54f, 0.12f, TwButton.Style.Primary, onStart);
                 m_Start.SetInteractable(false);
+                if (onTestLink != null)
+                {
+                    Button(TwCopy.TestLink, 0.47f, -0.4f, 0.3f, 0.08f, TwButton.Style.Ghost, onTestLink);
+                }
             }
             m_StartNote = Body(string.Empty, -0.5f, 1.0f);
             Button(TwCopy.LeaveRoom, 0f, -0.55f, 0.4f, 0.07f, TwButton.Style.Ghost, onLeave);
@@ -409,7 +414,8 @@ namespace Telewheel
             {
                 names.Add(m_View.NameOf(seat));
             }
-            m_Line.text = TwCopy.WaitingFor(names);
+            m_Line.text = names.Count == 0 && m_View.IsLoadingTurn
+                ? TwCopy.PassingDrawings : TwCopy.WaitingFor(names);
         }
     }
 

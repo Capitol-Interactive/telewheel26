@@ -50,6 +50,7 @@ namespace Telewheel
 
         private int m_LobbyVersion;
         private int m_StepVersion;
+        private NetMessage m_PendingTurn;
         private ClientState m_State = ClientState.Connecting;
         private RejectReason m_Rejection;
         private EndReason m_EndedBecause;
@@ -335,6 +336,11 @@ namespace Telewheel
             get { return m_StepVersion; }
         }
 
+        public bool IsLoadingTurn
+        {
+            get { return m_PendingTurn != null; }
+        }
+
         public IReadOnlyList<int> WaitingFor
         {
             get
@@ -518,6 +524,13 @@ namespace Telewheel
                 case NetKind.TurnStart:
                     OnTurnStart(message);
                     break;
+                case NetKind.TurnGo:
+                    OnTurnGo(message);
+                    break;
+                case NetKind.LinkTest:
+                    m_Port.SendToHost(
+                        NetMessage.LinkTestReply(message.A, message.Data == null ? 0 : message.Data.Length));
+                    break;
                 case NetKind.PresentItem:
                     OnPresentItem(message);
                     break;
@@ -614,9 +627,29 @@ namespace Telewheel
             EnterPhase(MatchPhase.Spin);
         }
 
+        // The prompt (maybe a big drawing) has arrived. Say so; the turn starts when the host says go.
         private void OnTurnStart(NetMessage message)
         {
             StartPlaying();
+            m_PendingTurn = message;
+            m_StepVersion++;
+            m_Port.SendToHost(NetMessage.TurnReady(message.A));
+        }
+
+        private void OnTurnGo(NetMessage message)
+        {
+            NetMessage start = m_PendingTurn;
+            if (start == null || start.A != message.A)
+            {
+                return;
+            }
+            m_PendingTurn = null;
+            m_StepVersion++;
+            ApplyTurnStart(start);
+        }
+
+        private void ApplyTurnStart(NetMessage message)
+        {
             m_Turn = message.A;
             m_TurnKind = (StageKind)message.B;
             m_TurnSeconds = message.Y;
