@@ -81,13 +81,10 @@ namespace Telewheel
             return true;
         }
 
-        /// <summary>Puts the player's own environment back (after a host's pick), mixed reality or the default.</summary>
+        /// <summary>Puts the player's own environment back after a host's pick: mixed reality, or Open Brush's default.</summary>
         public static void RestoreEnvironment()
         {
-            if (OpenBrushFacade.PassthroughSupported)
-            {
-                OpenBrushFacade.SetPassthrough(MixedReality);
-            }
+            OpenBrushFacade.SetPassthrough(MixedReality && OpenBrushFacade.PassthroughSupported);
         }
 
         public static void SetRightHanded(bool rightHanded)

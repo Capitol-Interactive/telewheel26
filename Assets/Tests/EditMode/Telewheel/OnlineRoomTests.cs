@@ -480,6 +480,67 @@ namespace Telewheel.Tests
             Assert.AreEqual(0, rig.Room.Match.Turn);
         }
 
+        [Test]
+        public void TheResultScreensAreNeverTreatedAsWaiting()
+        {
+            // Voting marks you done; the vote result, round end and game end that follow must start fresh,
+            // or the "waiting for" screen would cover them.
+            var rig = new Rig(rounds: 2).WithPlayers(3);
+            var doneOnEntry = new Dictionary<MatchPhase, bool>();
+            rig.HostBot.Client.PhaseChanged += (from, to) =>
+            {
+                if (to == MatchPhase.VoteResult || to == MatchPhase.RoundEnd || to == MatchPhase.GameEnd)
+                {
+                    doneOnEntry[to] = doneOnEntry.ContainsKey(to) && doneOnEntry[to] || rig.HostBot.Client.LocalDone;
+                }
+            };
+            Assert.IsTrue(rig.RunToEnd());
+            Assert.IsTrue(doneOnEntry.ContainsKey(MatchPhase.VoteResult));
+            Assert.IsTrue(doneOnEntry.ContainsKey(MatchPhase.RoundEnd));
+            Assert.IsTrue(doneOnEntry.ContainsKey(MatchPhase.GameEnd));
+            foreach (KeyValuePair<MatchPhase, bool> entry in doneOnEntry)
+            {
+                Assert.IsFalse(entry.Value, entry.Key + " must not start as done");
+            }
+            Assert.AreEqual(0, rig.HostBot.Client.WaitingFor.Count);
+        }
+
+        [Test]
+        public void TheLobbyVersionMovesWhenTheEnvironmentChanges()
+        {
+            var rig = new Rig().WithPlayers(2);
+            int before = rig.Bots[0].Client.LobbyVersion;
+            rig.Room.SetEnvironment("beach");
+            rig.Step(0f);
+            Assert.Greater(rig.Bots[0].Client.LobbyVersion, before, "a screen showing the old pick must rebuild");
+            Assert.AreEqual("beach", rig.Bots[0].Client.Environment);
+            int mid = rig.Bots[0].Client.LobbyVersion;
+            rig.Room.SetEnvironment("space");
+            rig.Step(0f);
+            Assert.Greater(rig.Bots[0].Client.LobbyVersion, mid);
+        }
+
+        [Test]
+        public void TheStepVersionMovesAsPeopleFinish()
+        {
+            var rig = new Rig().WithPlayers(3);
+            foreach (OnlineBot bot in rig.Everyone)
+            {
+                bot.Silent = true;
+            }
+            rig.Begin();
+            OnlineMatchClient c = rig.HostBot.Client;
+            int start = c.StepVersion;
+            rig.Bots[0].Client.CompleteSpin(0);
+            rig.Bots[0].Client.ConfirmSpin();
+            rig.Step(0f);
+            Assert.Greater(c.StepVersion, start, "someone else finished, so the waiting list changed");
+            int afterOther = c.StepVersion;
+            rig.Net.Disconnect(rig.Peers[1]);
+            rig.Step(0f);
+            Assert.Greater(c.StepVersion, afterOther, "someone leaving changes it too");
+        }
+
         // ----- Waiting for others -----
 
         [Test]

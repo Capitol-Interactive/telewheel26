@@ -49,6 +49,7 @@ namespace Telewheel
         private readonly HashSet<int> m_Gone = new HashSet<int>();
 
         private int m_LobbyVersion;
+        private int m_StepVersion;
         private ClientState m_State = ClientState.Connecting;
         private RejectReason m_Rejection;
         private EndReason m_EndedBecause;
@@ -329,6 +330,11 @@ namespace Telewheel
             get { return m_LocalDone; }
         }
 
+        public int StepVersion
+        {
+            get { return m_StepVersion; }
+        }
+
         public IReadOnlyList<int> WaitingFor
         {
             get
@@ -485,14 +491,17 @@ namespace Telewheel
                     break;
                 case NetKind.Environment:
                     m_Environment = message.Text ?? string.Empty;
+                    m_LobbyVersion++;
                     RaiseEnvironment();
                     break;
                 case NetKind.PlayerLeft:
                     m_Gone.Add(message.A);
+                    m_StepVersion++;
                     RaisePlayerLeft(message.A);
                     break;
                 case NetKind.Progress:
                     m_DoneMask = message.A;
+                    m_StepVersion++;
                     break;
                 case NetKind.MatchEnded:
                     End((EndReason)message.A);
@@ -520,17 +529,20 @@ namespace Telewheel
                     m_LastLanded = message.B != 0;
                     SetScores(message.Numbers);
                     m_Clock.Stop();
+                    ResetStep();
                     EnterPhase(MatchPhase.VoteResult);
                     break;
                 case NetKind.RoundEnd:
                     m_Round = message.A;
                     SetScores(message.Numbers);
                     m_Clock.Stop();
+                    ResetStep();
                     EnterPhase(MatchPhase.RoundEnd);
                     break;
                 case NetKind.GameEnd:
                     SetScores(message.Numbers);
                     m_Clock.Stop();
+                    ResetStep();
                     EnterPhase(MatchPhase.GameEnd);
                     break;
             }
@@ -681,11 +693,13 @@ namespace Telewheel
         {
             m_LocalDone = false;
             m_DoneMask = 0;
+            m_StepVersion++;
         }
 
         private void MarkLocalDone()
         {
             m_LocalDone = true;
+            m_StepVersion++;
             if (m_LocalSeat >= 0 && m_LocalSeat < 31)
             {
                 m_DoneMask |= 1 << m_LocalSeat;

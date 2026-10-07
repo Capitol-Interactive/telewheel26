@@ -324,11 +324,11 @@ namespace Telewheel
             if (m_Session.IsHost)
             {
                 OnlineRoomHost room = m_Session.Room;
-                TwButton.Create(d, "-", 0.09f, 0.09f, TwButton.Style.Secondary, new Vector3(0.38f, 0.2f, 0f),
+                TwButton.Create(d, "-", 0.09f, 0.09f, TwButton.Style.Secondary, new Vector3(0.36f, 0.2f, 0f),
                     () => room.SetRules(room.Settings.Rounds - 1, room.Settings.Filter));
                 TwUi.Display(d, client.RoundCount.ToString(), TwUi.Px(TwTokens.DisplayLg), TwTokens.Sun,
-                    new Vector3(0.5f, 0.2f, 0f));
-                TwButton.Create(d, "+", 0.09f, 0.09f, TwButton.Style.Secondary, new Vector3(0.62f, 0.2f, 0f),
+                    new Vector3(0.47f, 0.2f, 0f));
+                TwButton.Create(d, "+", 0.09f, 0.09f, TwButton.Style.Secondary, new Vector3(0.58f, 0.2f, 0f),
                     () => room.SetRules(room.Settings.Rounds + 1, room.Settings.Filter));
                 TwButton.Create(d, words, 0.5f, 0.09f, TwButton.Style.Secondary, new Vector3(0.38f, -0.06f, 0f),
                     () => room.SetRules(room.Settings.Rounds, client.Filter == ContentFilter.Family
@@ -337,7 +337,7 @@ namespace Telewheel
             else
             {
                 TwUi.Display(d, client.RoundCount.ToString(), TwUi.Px(TwTokens.DisplayLg), TwTokens.Sun,
-                    new Vector3(0.5f, 0.2f, 0f));
+                    new Vector3(0.47f, 0.2f, 0f));
                 TwUi.Text(d, words, TwUi.Px(TwTokens.Body), TwTokens.Ink, TwFonts.Bold,
                     new Vector3(0.12f, -0.02f, 0f), TextAlignmentOptions.Left);
             }
@@ -358,11 +358,11 @@ namespace Telewheel
             if (m_Session.IsHost)
             {
                 OnlineRoomHost room = m_Session.Room;
-                string currentName = client.Environment;
                 TwButton.Create(d, current, 0.5f, 0.09f, TwButton.Style.Secondary, new Vector3(0.38f, -0.26f, 0f),
                     () =>
                     {
-                        int next = (environments.IndexOf(currentName) + 1) % environments.Count;
+                        // Read the pick at click time: the screen is rebuilt after each change.
+                        int next = (environments.IndexOf(client.Environment) + 1) % environments.Count;
                         room.SetEnvironment(environments[next]);
                     });
             }
@@ -379,7 +379,7 @@ namespace Telewheel
     {
         private readonly IMatchView m_View;
         private readonly TextMeshPro m_Line;
-        private string m_Shown;
+        private int m_Version = -1;
 
         public TwWaitingScreen(IMatchView view)
             : base("Waiting", 1.6f, 0.05f)
@@ -398,17 +398,18 @@ namespace Telewheel
 
         private void Refresh()
         {
+            // The list only changes when someone finishes or leaves, so do not rebuild it every frame.
+            if (m_View.StepVersion == m_Version)
+            {
+                return;
+            }
+            m_Version = m_View.StepVersion;
             var names = new List<string>();
             foreach (int seat in m_View.WaitingFor)
             {
                 names.Add(m_View.NameOf(seat));
             }
-            string line = TwCopy.WaitingFor(names);
-            if (line != m_Shown)
-            {
-                m_Shown = line;
-                m_Line.text = line;
-            }
+            m_Line.text = TwCopy.WaitingFor(names);
         }
     }
 
@@ -431,7 +432,7 @@ namespace Telewheel
         private float m_Remaining;
 
         public TwToastScreen(string text, float seconds)
-            : base("Toast", 1.4f, 0.4f)
+            : base("Toast", 1.4f, 0.62f)
         {
             m_Remaining = seconds;
             Backdrop(1.0f, 0.12f);

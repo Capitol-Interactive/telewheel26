@@ -83,6 +83,9 @@ namespace Telewheel
 
         /// <summary>Seats that have not finished the current step (empty when nobody is being waited for).</summary>
         IReadOnlyList<int> WaitingFor { get; }
+
+        /// <summary>Goes up whenever <see cref="WaitingFor"/> may have changed, so a screen need not rebuild it every frame.</summary>
+        int StepVersion { get; }
     }
 
     /// <summary>A match a player can act in: the view plus the things the player can do.</summary>

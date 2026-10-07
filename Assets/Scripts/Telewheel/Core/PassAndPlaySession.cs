@@ -175,6 +175,11 @@ namespace Telewheel
             get { return NobodyWaiting; }
         }
 
+        public int StepVersion
+        {
+            get { return 0; }
+        }
+
         public void Tick(float dt)
         {
             m_Machine.Tick(dt);

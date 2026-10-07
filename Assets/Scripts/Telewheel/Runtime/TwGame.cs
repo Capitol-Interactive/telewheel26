@@ -53,6 +53,7 @@ namespace Telewheel
         private bool m_EndingDrawTurn;
         private bool m_TitleConfettiShown;
         private bool m_WaitingShown;
+        private bool m_HostEnvironmentApplied;
 
         public TwGame(TwDirector director, TwSketchService sketch, TwPointer pointer, int seed)
         {
@@ -379,7 +380,15 @@ namespace Telewheel
                     Defer(() => ShowNotice("CAN'T JOIN", TwCopy.RejectedLine(client.Rejection), ShowOnlineMenu));
                     break;
                 case ClientState.Ended:
-                    Defer(() => ShowNotice("MATCH ENDED", TwCopy.EndedLine(client.EndedBecause), ShowOnlineMenu));
+                    if (client.Phase == MatchPhase.GameEnd)
+                    {
+                        // The match was over; keep the final scores up and just say the room closed.
+                        ShowToast(TwCopy.EndedLine(client.EndedBecause));
+                    }
+                    else
+                    {
+                        Defer(() => ShowNotice("MATCH ENDED", TwCopy.EndedLine(client.EndedBecause), ShowOnlineMenu));
+                    }
                     break;
             }
         }
@@ -395,9 +404,9 @@ namespace Telewheel
         private void OnEnvironmentChanged(string name)
         {
             // The host's pick, unless this player is in mixed reality (which is personal).
-            if (!string.IsNullOrEmpty(name) && !TwPrefs.MixedReality)
+            if (!string.IsNullOrEmpty(name) && !TwPrefs.MixedReality && OpenBrushFacade.ApplyEnvironment(name))
             {
-                OpenBrushFacade.ApplyEnvironment(name);
+                m_HostEnvironmentApplied = true;
             }
         }
 
@@ -459,7 +468,11 @@ namespace Telewheel
                 client.EnvironmentChanged -= OnEnvironmentChanged;
                 m_Online.Leave();
                 m_Online = null;
-                TwPrefs.RestoreEnvironment();
+                if (m_HostEnvironmentApplied)
+                {
+                    m_HostEnvironmentApplied = false;
+                    TwPrefs.RestoreEnvironment();
+                }
             }
             else if (m_Session != null)
             {
@@ -684,7 +697,10 @@ namespace Telewheel
         // Online, handing in your part does not change the phase: the room waits for the others.
         private void ShowWaitingWhenDone()
         {
-            bool done = m_Session.IsOnline && m_Session.LocalDone && !m_EndingDrawTurn;
+            // Only while there is something to wait for; the result and score screens must stay up.
+            bool waitingPhase = m_Session.Phase == MatchPhase.Spin || m_Session.Phase == MatchPhase.Countdown
+                || m_Session.Phase == MatchPhase.Turn || m_Session.Phase == MatchPhase.Vote;
+            bool done = m_Session.IsOnline && waitingPhase && m_Session.LocalDone && !m_EndingDrawTurn;
             if (!done)
             {
                 m_WaitingShown = false;
