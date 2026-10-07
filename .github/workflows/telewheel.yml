@@ -9,6 +9,9 @@ on:  # yamllint disable-line rule:truthy
       - 'Assets/Resources/Telewheel/**'
       - 'Support/Telewheel/**'
       - 'Support/Python/telewheel_meta.py'
+      - 'Support/bin/setup-photon.py'
+      - 'Assets/Editor/TelewheelPhotonSetup.cs'
+      - 'ProjectSettings/ProjectSettings.asset'
       - '.github/workflows/telewheel.yml'
   push:
     branches:
@@ -30,5 +33,21 @@ jobs:
       - name: Compile the Unity-facing code outside Unity
         working-directory: Support/Telewheel/CompileCheck
         run: dotnet build Telewheel.CompileCheck.csproj
+      - name: Compile it again as a Photon build (MP_PHOTON defined)
+        working-directory: Support/Telewheel/CompileCheck
+        run: >-
+          dotnet build --no-incremental Telewheel.CompileCheck.csproj
+          -p:DefineConstants=MP_PHOTON
+      - name: The Photon setup script runs
+        run: python3 -I Support/bin/setup-photon.py defines
+      - name: MP_PHOTON must not be committed in the project settings
+        # A local setting for people with the Photon SDK; committed, it
+        # would break every build that does not have the SDK.
+        run: |
+          if grep -q "MP_PHOTON" ProjectSettings/ProjectSettings.asset; then
+            echo "MP_PHOTON is in ProjectSettings.asset. Remove it with"
+            echo "Telewheel > Online > Remove Photon Defines."
+            exit 1
+          fi
       - name: Check .meta GUIDs are unique
         run: python3 Support/Python/telewheel_meta.py check

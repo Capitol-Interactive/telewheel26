@@ -114,6 +114,12 @@ namespace Telewheel
         public const string PracticeNote = "Practice room: the other players are computer players.";
         public const string PracticeRoomTitle = "PRACTICE ROOM";
         public const string OnlineUnavailable = "Online play is unavailable.";
+        public const string OnlineNoSdk = "This build has no Photon SDK, so online play is off.";
+        public const string OnlineNoFusionId = "The Photon Fusion app id is missing from the Secrets asset.";
+        public const string OnlineNoVoiceId = "The Photon Voice app id is missing from the Secrets asset.";
+        public const string OnlineNoManager = "Online play is still starting up. Try again in a moment.";
+        public const string OnlineError = "Online play hit a problem. Restart the game and try again.";
+        public const string OnlineNotBuilt = "Online play over Photon is not connected to Telewheel yet.";
         public const string MixedRealityStuck = "Can't leave mixed reality while other players are in the room.";
         public const string EnvironmentLabel = "ENVIRONMENT";
         public const string DefaultEnvironment = "DEFAULT";

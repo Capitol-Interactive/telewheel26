@@ -74,6 +74,19 @@ namespace OpenBrush.Multiplayer
     {
         public static byte[] SerializeMemoryList(List<TiltBrush.Stroke> strokeList) { return null; }
     }
+
+    public enum ConnectionState
+    {
+        INITIALIZING, INITIALIZED, DISCONNECTED, DISCONNECTING, CONNECTING, AUTHENTICATING,
+        IN_LOBBY, JOINING_ROOM, IN_ROOM, RECONNECTING, ERROR, LEAVING_ROOM,
+    }
+
+    public class MultiplayerManager
+    {
+        public static MultiplayerManager m_Instance { get { return null; } }
+        public ConnectionState State { get { return ConnectionState.INITIALIZED; } }
+        public bool IsConnectable() { return true; }
+    }
 }
 
 namespace TiltBrush
@@ -82,7 +95,12 @@ namespace TiltBrush
     public class ApiEndpoint : Attribute { public ApiEndpoint(string endpoint, string description, string exampleUsage = null) { } }
 
     public enum SdkMode { Unset = -1, UnityXR, Monoscopic, Ods }
-    public class Config { public SdkMode m_SdkMode; }
+    public class Config
+    {
+        public SdkMode m_SdkMode;
+        public SecretsConfig.ServiceAuthData PhotonFusionSecrets { get { return null; } }
+        public SecretsConfig.ServiceAuthData PhotonVoiceSecrets { get { return null; } }
+    }
 
     public struct TrTransform
     {
@@ -266,4 +284,14 @@ namespace TiltBrush
         public bool WandOnRight { get; set; }
     }
     public class ViewpointScript : MonoBehaviour { public static Transform Head { get { return null; } } }
+}
+
+public class SecretsConfig : ScriptableObject
+{
+    public enum Service { Google = 0, Sketchfab = 1, Oculus = 2, OculusMobile = 3, Pimax = 4, PhotonFusion = 5, PhotonVoice = 6, Icosa = 7, Vive = 8 }
+
+    [Serializable]
+    public class ServiceAuthData { public Service Service; public string ClientId; }
+
+    public ServiceAuthData[] Secrets;
 }

@@ -18,6 +18,8 @@
     <Compile Include="../../../Assets/Scripts/Telewheel/UI/**/*.cs" />
     <Compile Include="../../../Assets/Scripts/Telewheel/Net/**/*.cs" />
     <Compile Include="../../../Assets/Scripts/API/ApiMethods.Telewheel.cs" />
+    <Compile Include="../../../Assets/Editor/TelewheelPhotonSetup.cs" />
+    <Compile Include="UnityEditorStubs.cs" />
     <Compile Include="OpenBrushStubs.cs" />
   </ItemGroup>
 

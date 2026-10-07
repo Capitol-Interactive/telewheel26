@@ -101,13 +101,16 @@ namespace Telewheel
             s_Backend = null;
         }
 
-        /// <summary>The real backend. Until one is set (the Photon transport), online play says it is unavailable.</summary>
+        /// <summary>
+        /// The real backend. Until one is set (the Photon transport), online play says why it cannot
+        /// run: no SDK in the build, an app id missing from the Secrets asset, or not connected yet.
+        /// </summary>
         public static ITwOnlineBackend Backend
         {
             get
             {
                 return s_Backend ?? new TwUnavailableBackend(
-                    "Online play is not set up in this build. The Photon app ids are missing.");
+                    TwOnlineAvailability.MissingPiece() ?? TwCopy.OnlineNotBuilt);
             }
             set { s_Backend = value; }
         }
