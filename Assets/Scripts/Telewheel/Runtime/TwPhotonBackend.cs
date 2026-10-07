@@ -29,7 +29,20 @@ namespace Telewheel
         /// <summary>How long a guest waits for the host to answer before deciding there is no such room.</summary>
         private const float HostWaitSeconds = 8f;
 
+        /// <summary>A guest alone in the room this long, with no host, has typed a code nobody made.</summary>
+        private const float EmptyRoomSeconds = 3f;
+
+        /// <summary>How long a new room is watched for earlier arrivals before it counts as ours alone.</summary>
+        private const float SettleSeconds = 1f;
+
         private const int CodeAttempts = 3;
+
+        // Each match that takes over Open Brush's multiplayer gets a number, so that the tidy-up of one
+        // match (which finishes in the background) cannot undo the set-up of the next.
+        private static int s_Generation;
+
+        // Leaving a Photon room takes a moment and nothing waits for it, except the next match.
+        private static Task s_Leaving = Task.CompletedTask;
 
         public string UnavailableReason
         {
@@ -56,7 +69,7 @@ namespace Telewheel
             catch (Exception e)
             {
                 Debug.LogException(e);
-                OpenBrushFacade.EndMatchMultiplayer();
+                StartLeaving(s_Generation);
                 failed(TwCopy.CouldNotConnect);
             }
         }
@@ -72,6 +85,7 @@ namespace Telewheel
                 failed(problem);
                 return;
             }
+            int generation = s_Generation;
 
             var random = new TwRandom(System.Environment.TickCount);
             for (int attempt = 0; attempt < CodeAttempts; attempt++)
@@ -81,24 +95,52 @@ namespace Telewheel
                 if (!joined)
                 {
                     Debug.LogWarning("[Telewheel] Could not make room " + code + ": " + OpenBrushFacade.MultiplayerError);
-                    await Abandon();
+                    StartLeaving(generation);
                     failed(TwCopy.CouldNotConnect);
                     return;
                 }
-                if (OpenBrushFacade.OtherPlayersInRoom == 0)
+                bool alone = await RoomStaysEmptyAsync();
+                if (!OpenBrushFacade.InMultiplayerRoom)
                 {
-                    ready(BuildHostSession(profile, settings, code));
+                    StartLeaving(generation);
+                    failed(TwCopy.CouldNotConnect);
+                    return;
+                }
+                if (alone)
+                {
+                    ready(BuildHostSession(profile, settings, code, generation));
                     return;
                 }
                 // Somebody is already in a room with that name: joining one by name makes it if there
                 // is none, so a taken code looks just like a free one. Try another.
-                await OpenBrushFacade.LeaveMultiplayerRoom();
+                if (!await OpenBrushFacade.LeaveMultiplayerRoom())
+                {
+                    StartLeaving(generation);
+                    failed(TwCopy.CouldNotConnect);
+                    return;
+                }
             }
-            await Abandon();
+            StartLeaving(generation);
             failed(TwCopy.NoFreeCode);
         }
 
-        private static OnlineSession BuildHostSession(PlayerProfile profile, MatchSettings settings, string code)
+        // Newcomers show up a moment after the room is joined, so look for a second before deciding.
+        private static async Task<bool> RoomStaysEmptyAsync()
+        {
+            float waited = 0f;
+            while (waited < SettleSeconds && OpenBrushFacade.InMultiplayerRoom)
+            {
+                if (OpenBrushFacade.OtherPlayersInRoom > 0)
+                {
+                    return false;
+                }
+                await Task.Yield();
+                waited += Time.unscaledDeltaTime;
+            }
+            return OpenBrushFacade.OtherPlayersInRoom == 0;
+        }
+
+        private static OnlineSession BuildHostSession(PlayerProfile profile, MatchSettings settings, string code, int generation)
         {
             OpenBrushFacade.PhotonLink link = OpenBrushFacade.CreatePhotonLink();
             var wire = new WireHost(link);
@@ -113,7 +155,7 @@ namespace Telewheel
             // Late arrivals are turned away by the game anyway; this stops them even reaching it.
             room.Started += OpenBrushFacade.CloseRoomToNewcomers;
             IDisposable watch = OpenBrushFacade.WatchRoomConnection(() => room.Close(EndReason.ConnectionLost));
-            session.AddCleanup(() => TearDown(watch, link, wire));
+            session.AddCleanup(() => TearDown(watch, link, wire, generation));
             client.Join();
             return session;
         }
@@ -129,6 +171,7 @@ namespace Telewheel
                 failed(problem);
                 return;
             }
+            int generation = s_Generation;
 
             // Listen before joining, so the host's greeting cannot arrive unheard.
             OpenBrushFacade.PhotonLink link = OpenBrushFacade.CreatePhotonLink();
@@ -146,31 +189,40 @@ namespace Telewheel
             {
                 Debug.LogWarning("[Telewheel] Could not join room " + code + ": " + OpenBrushFacade.MultiplayerError);
                 Discard(link, wire, client);
-                await Abandon();
+                StartLeaving(generation);
                 failed(TwCopy.CouldNotConnect);
                 return;
             }
 
             float waited = 0f;
-            while (!hostFound && waited < HostWaitSeconds && OpenBrushFacade.InMultiplayerRoom)
+            float alone = 0f;
+            while (!hostFound && waited < HostWaitSeconds && alone < EmptyRoomSeconds && OpenBrushFacade.InMultiplayerRoom)
             {
                 link.Poll();
                 await Task.Yield();
-                waited += Time.unscaledDeltaTime;
+                float dt = Time.unscaledDeltaTime;
+                waited += dt;
+                alone = OpenBrushFacade.OtherPlayersInRoom == 0 ? alone + dt : 0f;
             }
-            if (!hostFound)
+            if (!hostFound || !OpenBrushFacade.InMultiplayerRoom)
             {
-                // Joining a name makes the room if it is not there, so a mistyped code gets here.
+                // Joining a name makes the room if it is not there, so a mistyped code gets here. (Read
+                // whether we are still in a room before leaving it, or the answer is always no.)
+                bool stillInRoom = OpenBrushFacade.InMultiplayerRoom;
                 Discard(link, wire, client);
-                await Abandon();
-                failed(OpenBrushFacade.InMultiplayerRoom ? TwCopy.NoSuchRoom : TwCopy.CouldNotConnect);
+                StartLeaving(generation);
+                failed(stillInRoom ? TwCopy.NoSuchRoom : TwCopy.CouldNotConnect);
                 return;
             }
 
             var session = new OnlineSession(client, null, code);
-            session.AddTicker(dt => link.Poll());
+            session.AddTicker(dt =>
+            {
+                link.Poll();
+                wire.Tick(dt);
+            });
             IDisposable watch = OpenBrushFacade.WatchRoomConnection(client.ConnectionLost);
-            session.AddCleanup(() => TearDown(watch, link, wire));
+            session.AddCleanup(() => TearDown(watch, link, wire, generation));
             ready(session);
         }
 
@@ -179,38 +231,46 @@ namespace Telewheel
         // Sets Open Brush up for a match and gets to the lobby. Returns a message if it cannot.
         private static async Task<string> PrepareAsync(PlayerProfile profile)
         {
+            // The last match may still be on its way out of the room.
+            await s_Leaving;
+
             string problem = TwOnlineAvailability.MissingPiece();
             if (problem != null)
             {
                 return problem;
             }
-            if (OpenBrushFacade.MultiplayerStage == MultiplayerStage.Busy)
+            MultiplayerStage stage = OpenBrushFacade.MultiplayerStage;
+            if (stage == MultiplayerStage.Busy)
             {
                 return TwCopy.OnlineBusy;
             }
+            s_Generation++;
             OpenBrushFacade.BeginMatchMultiplayer(
                 profile, TwPrefs.VoiceEnabled, OpenBrushFacade.Settings.Region);
-            if (OpenBrushFacade.MultiplayerStage == MultiplayerStage.NeedsConnect)
+
+            if (stage == MultiplayerStage.NeedsReset)
+            {
+                // An earlier connection failed and Open Brush stays in its error state until told otherwise.
+                Debug.LogWarning("[Telewheel] Clearing an earlier multiplayer error: " + OpenBrushFacade.MultiplayerError);
+                await OpenBrushFacade.ResetMultiplayer();
+                stage = OpenBrushFacade.MultiplayerStage;
+                if (stage == MultiplayerStage.NeedsReset || stage == MultiplayerStage.Busy)
+                {
+                    StartLeaving(s_Generation);
+                    return TwCopy.CouldNotConnect;
+                }
+            }
+            if (stage == MultiplayerStage.NeedsConnect)
             {
                 bool connected = await OpenBrushFacade.ConnectMultiplayer();
                 if (!connected)
                 {
                     Debug.LogWarning("[Telewheel] Could not connect: " + OpenBrushFacade.MultiplayerError);
-                    OpenBrushFacade.EndMatchMultiplayer();
+                    StartLeaving(s_Generation);
                     return TwCopy.CouldNotConnect;
                 }
             }
             return null;
-        }
-
-        // Leaves whatever was joined and puts Open Brush back as it was.
-        private static async Task Abandon()
-        {
-            if (OpenBrushFacade.InMultiplayerRoom)
-            {
-                await OpenBrushFacade.LeaveMultiplayerRoom();
-            }
-            OpenBrushFacade.EndMatchMultiplayer();
         }
 
         private static void Discard(OpenBrushFacade.PhotonLink link, WireClient wire, OnlineMatchClient client)
@@ -221,24 +281,38 @@ namespace Telewheel
         }
 
         // Runs when the session is left, however that happens.
-        private static void TearDown(IDisposable watch, OpenBrushFacade.PhotonLink link, IDisposable wire)
+        private static void TearDown(IDisposable watch, OpenBrushFacade.PhotonLink link, IDisposable wire, int generation)
         {
             watch.Dispose();
             wire.Dispose();
             link.Dispose();
-            // Leaving the Photon room takes a moment and nothing waits for it.
-            LeaveInBackground();
+            StartLeaving(generation);
         }
 
-        private static async void LeaveInBackground()
+        // Leaves whatever room is joined and, if no newer match has started since, puts Open Brush back as
+        // it was. Happens in the background; the next match waits for it (see PrepareAsync).
+        private static void StartLeaving(int generation)
+        {
+            s_Leaving = LeaveAsync(s_Leaving, generation);
+        }
+
+        private static async Task LeaveAsync(Task previous, int generation)
         {
             try
             {
-                await Abandon();
+                await previous;
+                if (OpenBrushFacade.InMultiplayerRoom)
+                {
+                    await OpenBrushFacade.LeaveMultiplayerRoom();
+                }
             }
             catch (Exception e)
             {
                 Debug.LogException(e);
+            }
+            if (generation == s_Generation)
+            {
+                OpenBrushFacade.EndMatchMultiplayer();
             }
         }
     }

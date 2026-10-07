@@ -42,10 +42,14 @@ namespace OpenBrush.Multiplayer
         void SendLargeDataToPlayer(int playerId, byte[] largeData, int percentage);
         // Telewheel: plain messages between players, for the game running on top of the room.
         // They never touch the sketch. SendCustomData returns false if the player cannot be reached.
+        // CustomDataReceived deliberately does not say who sent the bytes: in Photon's Shared mode the
+        // sender reported with received data is always the receiving player, so it cannot be relied on.
         bool SendCustomData(int playerId, byte[] data);
         IList<int> GetRemotePlayerIds();
+        // This device's own id in the room, or -1 when there is none (not in a room yet, or gone).
+        int GetLocalPlayerId();
         void SetRoomOpen(bool open);
-        event Action<int, byte[]> CustomDataReceived;
+        event Action<byte[]> CustomDataReceived;
 
         Task<bool> PerformCommand(BaseCommand command);
         Task<bool> SendCommandToPlayer(BaseCommand command, int playerId);

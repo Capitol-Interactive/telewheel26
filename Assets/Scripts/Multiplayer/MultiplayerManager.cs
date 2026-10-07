@@ -49,8 +49,9 @@ namespace OpenBrush.Multiplayer
         // Telewheel: whether joining a room opens the microphone straight away.
         public bool StartMicrophoneOnJoin = true;
 
-        // Telewheel: messages from the other players, for the game on top. (player id, bytes)
-        public Action<int, byte[]> customDataReceived;
+        // Telewheel: messages from the other players, for the game on top. The sender is not given: the
+        // transport cannot be trusted to say (see IDataConnectionHandler.CustomDataReceived).
+        public Action<byte[]> customDataReceived;
 
         // Telewheel: pin Photon to one region (e.g. "eu") for both the room and voice, so two players
         // cannot each end up creating a room of the same name in different regions. Empty = best ping.
@@ -74,6 +75,13 @@ namespace OpenBrush.Multiplayer
         public ITransientData<PlayerRigData> m_LocalPlayer;
         [HideInInspector] public RemotePlayers m_RemotePlayers;
         public int LocalPlayerId => m_LocalPlayer?.PlayerId ?? -1;
+
+        // Telewheel: this device's id in the room as soon as the room is joined. LocalPlayerId above
+        // waits for the player's avatar to spawn, which comes later and is not needed to send messages.
+        public int LocalNetworkPlayerId => m_Manager?.GetLocalPlayerId() ?? -1;
+
+        // Telewheel: false when Photon could not even start (no secrets, say), and there is nothing to retry.
+        public bool HasConnectionHandler => m_Manager != null;
 
         public Action<int, ITransientData<PlayerRigData>> localPlayerJoined;
         public Action<RemotePlayer> remotePlayerJoined;
@@ -301,6 +309,8 @@ namespace OpenBrush.Multiplayer
             bool successVoice = false;
             m_VoiceManager?.StopSpeaking();
             if (m_VoiceManager != null) successVoice = await m_VoiceManager.LeaveRoom();
+            // Telewheel: leaving a match must work whatever the voice side did.
+            if (VoiceIsOptional) successVoice = true;
 
             if (!successData)
             {
@@ -326,6 +336,8 @@ namespace OpenBrush.Multiplayer
 
             bool successVoice = false;
             if (m_VoiceManager != null) successVoice = await m_VoiceManager.Disconnect();
+            // Telewheel: the same as in LeaveRoom.
+            if (VoiceIsOptional) successVoice = true;
 
             if (!successData)
             {
@@ -642,9 +654,9 @@ namespace OpenBrush.Multiplayer
             m_Manager?.SetRoomOpen(open);
         }
 
-        private void OnCustomDataReceived(int fromPlayerId, byte[] data)
+        private void OnCustomDataReceived(byte[] data)
         {
-            customDataReceived?.Invoke(fromPlayerId, data);
+            customDataReceived?.Invoke(data);
         }
 
         void OnPlayerLeft(int id)
@@ -789,7 +801,7 @@ namespace OpenBrush.Multiplayer
         private void OnConnectionHandlerDisconnected()
         {
             m_LocalPlayer = null;// Clean up local player reference
-            m_RemotePlayers.ClearList();// Clean up remote player references
+            m_RemotePlayers?.ClearList();// Clean up remote player references // Telewheel: null-safe
             LastError = null;
             State = ConnectionState.DISCONNECTED;
             StateUpdated?.Invoke(State);

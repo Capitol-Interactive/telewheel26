@@ -105,19 +105,22 @@ namespace OpenBrush.Multiplayer
         public string LastError { get { return null; } }
         public ConnectionUserInfo UserInfo { get; set; }
         public int LocalPlayerId { get { return -1; } }
+        public int LocalNetworkPlayerId { get { return -1; } }
+        public bool HasConnectionHandler { get { return true; } }
         public RemotePlayers m_RemotePlayers;
         public bool SuppressCommandSharing;
         public bool VoiceIsOptional;
         public bool StartMicrophoneOnJoin;
         public int AvatarIconIndex;
         public string Region;
-        public Action<int, byte[]> customDataReceived;
+        public Action<byte[]> customDataReceived;
         public Action<int> playerLeft;
         public event Action<ConnectionState> StateUpdated;
         public bool IsConnectable() { return true; }
         public System.Threading.Tasks.Task<bool> Connect() { return null; }
         public System.Threading.Tasks.Task<bool> JoinRoom(RoomCreateData data) { return null; }
         public System.Threading.Tasks.Task<bool> LeaveRoom(bool force = false) { return null; }
+        public System.Threading.Tasks.Task<bool> Disconnect() { return null; }
         public bool SendCustomData(int playerId, byte[] data) { return false; }
         public IList<int> GetRemotePlayerIds() { return null; }
         public void SetRoomOpen(bool open) { }

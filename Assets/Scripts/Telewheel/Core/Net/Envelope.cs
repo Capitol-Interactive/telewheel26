@@ -20,15 +20,16 @@ namespace Telewheel
 {
     /// <summary>
     /// The frame around every message on a real connection: what kind of frame it is, where it falls
-    /// in the sender's sequence, and the payload, compressed when that helps. Whatever arrives from the
-    /// network is untrusted, so unpacking never throws and never expands past a fixed size.
+    /// in the sender's sequence, who the sender says it is and the secret that proves it, and the
+    /// payload, compressed when that helps. Whatever arrives from the network is untrusted, so
+    /// unpacking never throws and never expands past a fixed size.
     /// </summary>
     public static class Envelope
     {
         /// <summary>A <see cref="NetMessage"/> encoded with <see cref="NetCodec"/>.</summary>
         public const byte KindMessage = 1;
 
-        /// <summary>The host saying "I am the host" to a peer that has just arrived (no payload).</summary>
+        /// <summary>The host saying "I am the host, and this is your secret" to a new arrival (no payload).</summary>
         public const byte KindHostHello = 2;
 
         /// <summary>Payloads bigger than this are compressed (when it makes them smaller).</summary>
@@ -38,9 +39,11 @@ namespace Telewheel
         public const int MaxPayloadBytes = 8 * 1024 * 1024;
 
         private const byte FlagCompressed = 1;
-        private const int HeaderBytes = 6;
 
-        public static byte[] Pack(byte kind, uint sequence, byte[] payload)
+        /// <summary>kind, flags, sequence (4), sender (4), token (8).</summary>
+        public const int HeaderBytes = 18;
+
+        public static byte[] Pack(byte kind, uint sequence, int sender, ulong token, byte[] payload)
         {
             byte[] body = payload ?? new byte[0];
             byte flags = 0;
@@ -56,19 +59,22 @@ namespace Telewheel
             var frame = new byte[HeaderBytes + body.Length];
             frame[0] = kind;
             frame[1] = flags;
-            frame[2] = (byte)sequence;
-            frame[3] = (byte)(sequence >> 8);
-            frame[4] = (byte)(sequence >> 16);
-            frame[5] = (byte)(sequence >> 24);
+            WriteUInt32(frame, 2, sequence);
+            WriteUInt32(frame, 6, unchecked((uint)sender));
+            WriteUInt32(frame, 10, (uint)token);
+            WriteUInt32(frame, 14, (uint)(token >> 32));
             Buffer.BlockCopy(body, 0, frame, HeaderBytes, body.Length);
             return frame;
         }
 
         /// <summary>Opens a frame. Returns false for anything that is not a well-formed frame.</summary>
-        public static bool TryUnpack(byte[] frame, out byte kind, out uint sequence, out byte[] payload)
+        public static bool TryUnpack(
+            byte[] frame, out byte kind, out uint sequence, out int sender, out ulong token, out byte[] payload)
         {
             kind = 0;
             sequence = 0;
+            sender = 0;
+            token = 0;
             payload = null;
             if (frame == null || frame.Length < HeaderBytes)
             {
@@ -80,7 +86,9 @@ namespace Telewheel
             {
                 return false;
             }
-            sequence = (uint)(frame[2] | (frame[3] << 8) | (frame[4] << 16) | (frame[5] << 24));
+            sequence = ReadUInt32(frame, 2);
+            sender = unchecked((int)ReadUInt32(frame, 6));
+            token = ReadUInt32(frame, 10) | ((ulong)ReadUInt32(frame, 14) << 32);
             int length = frame.Length - HeaderBytes;
             if ((flags & FlagCompressed) != 0)
             {
@@ -94,6 +102,19 @@ namespace Telewheel
             payload = new byte[length];
             Buffer.BlockCopy(frame, HeaderBytes, payload, 0, length);
             return true;
+        }
+
+        private static void WriteUInt32(byte[] buffer, int offset, uint value)
+        {
+            buffer[offset] = (byte)value;
+            buffer[offset + 1] = (byte)(value >> 8);
+            buffer[offset + 2] = (byte)(value >> 16);
+            buffer[offset + 3] = (byte)(value >> 24);
+        }
+
+        private static uint ReadUInt32(byte[] buffer, int offset)
+        {
+            return (uint)(buffer[offset] | (buffer[offset + 1] << 8) | (buffer[offset + 2] << 16) | (buffer[offset + 3] << 24));
         }
 
         private static byte[] Compress(byte[] data)

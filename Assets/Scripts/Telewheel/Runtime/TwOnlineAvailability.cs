@@ -46,7 +46,9 @@ namespace Telewheel
             {
                 return TwCopy.OnlineNoManager;
             }
-            if (manager.State == ConnectionState.ERROR)
+            // An ERROR state is not a reason by itself: the backend clears it and tries again. Only
+            // Photon not having started at all (nothing to retry) is.
+            if (!manager.HasConnectionHandler)
             {
                 return TwCopy.OnlineError;
             }

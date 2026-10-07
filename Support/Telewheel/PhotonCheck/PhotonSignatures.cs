@@ -23,13 +23,13 @@ namespace Telewheel.PhotonCheck
             }
         }
 
-        // Telling a game message from stroke sync: PhotonManager.OnReliableDataReceived.
-        public static bool IsCustom(ReliableKey key, PlayerRef player, ReadOnlySpan<byte> data, out int from, out byte[] copy)
+        // Telling a game message from stroke sync: PhotonManager.OnReliableDataReceived. The player passed
+        // with received data is deliberately not read: in Shared mode it is the receiver itself.
+        public static bool IsCustom(ReliableKey key, PlayerRef player, ReadOnlySpan<byte> data, out byte[] copy)
         {
             int keyMagic;
             int percentage;
             key.GetInts(out keyMagic, out _, out _, out percentage);
-            from = player.RawEncoded;
             copy = data.IsEmpty ? null : data.ToArray();
             return percentage == -7 && keyMagic == 0x54574C31 && data.Length <= 16 * 1024 * 1024;
         }
@@ -46,6 +46,24 @@ namespace Telewheel.PhotonCheck
                 }
             }
             return ids;
+        }
+
+        // This device's own id: PhotonManager.GetLocalPlayerId.
+        public static int LocalId(NetworkRunner runner)
+        {
+            if (runner == null || runner.IsShutdown)
+            {
+                return -1;
+            }
+            PlayerRef local = runner.LocalPlayer;
+            return local == PlayerRef.None ? -1 : local.RawEncoded;
+        }
+
+        // Losing the connection: PhotonManager.OnDisconnectedFromServer reads the reason and compares runners.
+        public static string Lost(INetworkRunnerCallbacks callbacks, NetworkRunner runner, NetworkRunner current, NetDisconnectReason reason)
+        {
+            callbacks.OnDisconnectedFromServer(runner, reason);
+            return runner != current ? string.Empty : reason.ToString();
         }
 
         // Closing the room to newcomers: PhotonManager.SetRoomOpen.

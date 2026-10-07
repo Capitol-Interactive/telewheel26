@@ -30,8 +30,11 @@ namespace Telewheel
         /// <summary>Connected, in the lobby, ready to join a room.</summary>
         InLobby,
 
-        /// <summary>Connecting, joining, leaving, in a room or in an error: not now.</summary>
+        /// <summary>Connecting, joining, leaving or in a room: not now.</summary>
         Busy,
+
+        /// <summary>An earlier connection failed; <see cref="OpenBrushFacade.ResetMultiplayer"/> clears it and then a connect can be tried.</summary>
+        NeedsReset,
     }
 
     /// <summary>
@@ -61,11 +64,17 @@ namespace Telewheel
             get { return Manager != null && Manager.State == ConnectionState.IN_ROOM; }
         }
 
+        /// <summary>True when Open Brush's multiplayer could not even start (no Photon, no secrets): nothing to retry.</summary>
+        public static bool MultiplayerBroken
+        {
+            get { return Manager == null || !Manager.HasConnectionHandler; }
+        }
+
         public static MultiplayerStage MultiplayerStage
         {
             get
             {
-                if (Manager == null)
+                if (MultiplayerBroken)
                 {
                     return MultiplayerStage.Busy;
                 }
@@ -76,10 +85,21 @@ namespace Telewheel
                         return MultiplayerStage.NeedsConnect;
                     case ConnectionState.IN_LOBBY:
                         return MultiplayerStage.InLobby;
+                    case ConnectionState.ERROR:
+                        return MultiplayerStage.NeedsReset;
                     default:
                         return MultiplayerStage.Busy;
                 }
             }
+        }
+
+        /// <summary>
+        /// Clears a failed connection (the manager stays in ERROR until it is disconnected) so that a
+        /// new one can be tried. True when it worked.
+        /// </summary>
+        public static Task<bool> ResetMultiplayer()
+        {
+            return Manager.Disconnect();
         }
 
         /// <summary>
@@ -175,7 +195,11 @@ namespace Telewheel
             }
         }
 
-        /// <summary>Mutes or unmutes everyone else for this player only. Call again when people join.</summary>
+        /// <summary>
+        /// Mutes or unmutes everyone else for this player only. Call again every so often: a player's voice
+        /// can arrive after their avatar, and a mute that found no voice yet has to be applied again, so
+        /// this does not skip players already marked muted.
+        /// </summary>
         public static void MuteOtherPlayers(bool muted)
         {
             if (Manager == null || Manager.m_RemotePlayers == null)
@@ -184,10 +208,7 @@ namespace Telewheel
             }
             foreach (RemotePlayer player in Manager.m_RemotePlayers.List)
             {
-                if (player.m_IsMutedForMe != muted)
-                {
-                    Manager.MutePlayerForMe(muted, player.PlayerId);
-                }
+                Manager.MutePlayerForMe(muted, player.PlayerId);
             }
         }
 
@@ -259,13 +280,16 @@ namespace Telewheel
 
         /// <summary>
         /// Open Brush's room as an <see cref="IByteLink"/>. It forwards game messages and reports who comes
-        /// and goes; call <see cref="Poll"/> every frame to notice arrivals.
+        /// and goes; call <see cref="Poll"/> every frame to notice arrivals and departures. Photon's
+        /// Shared mode does not say who sent a message (see <see cref="IByteLink"/>), so it does not.
         /// </summary>
         public sealed class PhotonLink : IByteLink, IDisposable
         {
             private readonly MultiplayerManager m_Manager;
-            private readonly HashSet<int> m_Known = new HashSet<int>();
+            private readonly HashSet<int> m_Present = new HashSet<int>(); // In the room at the last Poll.
+            private readonly HashSet<int> m_Known = new HashSet<int>();   // Reported as arrived, not yet as gone.
             private readonly HashSet<int> m_Gone = new HashSet<int>();
+            private readonly List<int> m_Missing = new List<int>();
 
             public PhotonLink(MultiplayerManager manager)
             {
@@ -274,20 +298,35 @@ namespace Telewheel
                 m_Manager.playerLeft += OnLeft;
             }
 
-            public event Action<int, byte[]> Received;
+            public event Action<byte[]> Received;
 
             public event Action<int> PeerJoined;
 
             public event Action<int> PeerLeft;
 
-            public void Send(int peer, byte[] bytes)
+            public int LocalPeer
             {
-                m_Manager.SendCustomData(peer, bytes);
+                get { return m_Manager.LocalNetworkPlayerId; }
+            }
+
+            public bool IsPresent(int peer)
+            {
+                return m_Present.Contains(peer);
+            }
+
+            public bool Send(int peer, byte[] bytes)
+            {
+                return m_Manager.SendCustomData(peer, bytes);
             }
 
             public void Poll()
             {
                 IList<int> current = m_Manager.GetRemotePlayerIds();
+                m_Present.Clear();
+                foreach (int id in current)
+                {
+                    m_Present.Add(id);
+                }
                 foreach (int id in current)
                 {
                     if (m_Known.Add(id))
@@ -301,24 +340,17 @@ namespace Telewheel
                     }
                 }
                 // Anyone we knew who is no longer in the room has left (the leave event may have been missed).
-                List<int> missing = null;
+                m_Missing.Clear();
                 foreach (int id in m_Known)
                 {
-                    if (!current.Contains(id))
+                    if (!m_Present.Contains(id))
                     {
-                        if (missing == null)
-                        {
-                            missing = new List<int>();
-                        }
-                        missing.Add(id);
+                        m_Missing.Add(id);
                     }
                 }
-                if (missing != null)
+                foreach (int id in m_Missing)
                 {
-                    foreach (int id in missing)
-                    {
-                        OnLeft(id);
-                    }
+                    OnLeft(id);
                 }
             }
 
@@ -328,21 +360,22 @@ namespace Telewheel
                 m_Manager.playerLeft -= OnLeft;
             }
 
-            private void OnData(int from, byte[] bytes)
+            private void OnData(byte[] bytes)
             {
-                Action<int, byte[]> handler = Received;
+                Action<byte[]> handler = Received;
                 if (handler != null)
                 {
-                    handler(from, bytes);
+                    handler(bytes);
                 }
             }
 
             private void OnLeft(int id)
             {
-                if (id == m_Manager.LocalPlayerId)
+                if (id == LocalPeer)
                 {
                     return; // That is us leaving; the room watch deals with it.
                 }
+                m_Present.Remove(id);
                 m_Known.Remove(id);
                 if (m_Gone.Add(id))
                 {

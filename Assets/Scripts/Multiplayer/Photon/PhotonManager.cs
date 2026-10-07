@@ -44,7 +44,7 @@ namespace OpenBrush.Multiplayer
         private const int CustomDataTag = -7;
         private const int MaxCustomDataBytes = 16 * 1024 * 1024;
         private int m_CustomSequence;
-        public event Action<int, byte[]> CustomDataReceived;
+        public event Action<byte[]> CustomDataReceived;
 
         public ConnectionUserInfo UserInfo { get; set; }
         public ConnectionState State { get; private set; }
@@ -485,6 +485,14 @@ namespace OpenBrush.Multiplayer
             }
         }
 
+        // Telewheel: this device's own id, or -1 before the room has given it one or after it is gone.
+        public int GetLocalPlayerId()
+        {
+            if (m_Runner == null || m_Runner.IsShutdown) return -1;
+            PlayerRef local = m_Runner.LocalPlayer;
+            return local == PlayerRef.None ? -1 : local.RawEncoded;
+        }
+
         // Telewheel: everyone else in the room, whether or not their avatar has spawned yet.
         public IList<int> GetRemotePlayerIds()
         {
@@ -742,12 +750,14 @@ namespace OpenBrush.Multiplayer
             //Debug.Log($"Data received with percentage: {percentage}%");
 
             // Telewheel: game messages are told apart by their key and never reach the sketch code. Copy
-            // the bytes: the span is only valid for the duration of this call.
+            // the bytes: the span is only valid for the duration of this call. Who sent them is NOT passed
+            // on: in Shared mode `player` here is this device itself, so the game puts the sender inside
+            // the message and checks it there.
             if (percentage == CustomDataTag && keyMagic == CustomDataMagic)
             {
                 if (!data.IsEmpty && data.Length <= MaxCustomDataBytes)
                 {
-                    CustomDataReceived?.Invoke(player.RawEncoded, data.ToArray());
+                    CustomDataReceived?.Invoke(data.ToArray());
                 }
                 return;
             }
@@ -777,6 +787,8 @@ namespace OpenBrush.Multiplayer
         #region Unused Photon Callbacks 
         public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
         {
+            // Telewheel: only for the runner in use; a late call from one already replaced is not news.
+            if (runner != m_Runner) return;
             Disconnected?.Invoke();
         }
         public void OnDisconnectedFromServer(NetworkRunner runner) { }
@@ -792,7 +804,14 @@ namespace OpenBrush.Multiplayer
         public void OnSceneLoadStart(NetworkRunner runner) { }
         public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
         public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
-        public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
+        public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
+        {
+            // Telewheel: losing the connection to Photon (network gone, headset asleep) used to leave the
+            // manager believing it was still in the room. Treat it like a shutdown.
+            if (runner != m_Runner) return;
+            Debug.LogWarning($"[PhotonManager] Disconnected from the server: {reason}");
+            Disconnected?.Invoke();
+        }
 
 
         #endregion
