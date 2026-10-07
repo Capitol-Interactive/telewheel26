@@ -32,6 +32,10 @@ namespace Telewheel
             online.SetInteractable(false);
             Body(TwCopy.OnlineSoon, -0.2f);
             Button(TwCopy.Settings, 0f, -0.32f, 0.64f, 0.12f, TwButton.Style.Secondary, onSettings);
+            if (OpenBrushFacade.IsMonoscopic)
+            {
+                Body("Desktop: mouse aims, click presses, hold Alt to look around.", -0.43f, 0.85f);
+            }
         }
     }
 

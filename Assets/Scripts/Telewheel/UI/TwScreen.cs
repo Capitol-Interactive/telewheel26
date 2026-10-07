@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System;
 using TMPro;
 using UnityEngine;
 
@@ -36,6 +37,19 @@ namespace Telewheel
             get { return Root.transform; }
         }
 
+        /// <summary>
+        /// Adds a small MENU button (the system menu: exit, preferences, photo) in the screen's
+        /// bottom-left corner, for players whose hand menu is hidden between turns.
+        /// </summary>
+        public void AddMenuButton(Action onMenu)
+        {
+            if (Root != null)
+            {
+                TwButton.Create(T, "Menu", 0.18f, 0.07f, TwButton.Style.Ghost,
+                    new Vector3(-0.66f, -0.72f, 0f), onMenu);
+            }
+        }
+
         /// <summary>Called every frame while the screen is showing.</summary>
         public virtual void Tick(float dt)
         {
@@ -49,7 +63,7 @@ namespace Telewheel
             }
             // Deactivate first so its buttons stop being clickable straight away.
             Root.SetActive(false);
-            Object.Destroy(Root);
+            UnityEngine.Object.Destroy(Root);
             Root = null;
         }
 

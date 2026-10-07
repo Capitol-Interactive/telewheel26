@@ -19,11 +19,14 @@ namespace Telewheel
 {
     /// <summary>
     /// Points at Telewheel buttons and clicks them. In VR the ray comes from the brush controller
-    /// (with a laser line); on a desktop it is the centre of the screen (with a small reticle).
-    /// It runs before Open Brush's own update so that a click on a Telewheel button is marked as
-    /// used before Open Brush decides whether to start a stroke.
+    /// (with a laser line). On a desktop it comes from a virtual mouse cursor (hold Alt to turn
+    /// the camera instead), shown as a small reticle.
+    ///
+    /// It runs before everything in Open Brush, including App.Update which updates the drawing
+    /// tool, so a click on a Telewheel button is marked as used before the tool decides whether to
+    /// start a stroke.
     /// </summary>
-    [DefaultExecutionOrder(-100)]
+    [DefaultExecutionOrder(-200)]
     public sealed class TwPointer : MonoBehaviour
     {
         private const float MaxDistanceUnits = 200f;
@@ -32,6 +35,14 @@ namespace Telewheel
         private TwButton m_Hover;
         private LineRenderer m_Laser;
         private GameObject m_Reticle;
+        private Vector2 m_Cursor;
+        private bool m_CursorPlaced;
+
+        /// <summary>
+        /// True while the player is drawing: the mouse then belongs to Open Brush's brush, and the
+        /// laser is hidden unless a button is being pointed at.
+        /// </summary>
+        public bool Drawing { get; set; }
 
         /// <summary>The button under the pointer, if any.</summary>
         public TwButton Hover
@@ -60,11 +71,25 @@ namespace Telewheel
             SetHover(null);
         }
 
+        private bool TryGetRay(out Ray ray)
+        {
+            if (OpenBrushFacade.IsMonoscopic && !Drawing)
+            {
+                if (!m_CursorPlaced)
+                {
+                    m_Cursor = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+                    m_CursorPlaced = true;
+                }
+                return OpenBrushFacade.TryGetCursorRay(ref m_Cursor, true, out ray);
+            }
+            return OpenBrushFacade.TryGetPointerRay(out ray);
+        }
+
         private void Update()
         {
             IList<TwButton> buttons = TwButton.Active;
             Ray ray;
-            if (buttons.Count == 0 || !OpenBrushFacade.TryGetPointerRay(out ray))
+            if (buttons.Count == 0 || !TryGetRay(out ray))
             {
                 SetHover(null);
                 m_Reticle.SetActive(false);
@@ -109,17 +134,20 @@ namespace Telewheel
         private void ShowAim(Ray ray, float hitDistance)
         {
             bool vr = !OpenBrushFacade.IsMonoscopic;
-            float distance = hitDistance >= 0f ? hitDistance : ReticleDistanceUnits;
+            bool hitting = hitDistance >= 0f;
+            float distance = hitting ? hitDistance : ReticleDistanceUnits;
             Vector3 point = ray.origin + ray.direction * distance;
 
-            m_Laser.enabled = vr;
-            if (vr)
+            // In VR the laser is a pointing aid for the screens; while drawing it only shows when
+            // aiming at a button, so it does not sit in the way of the drawing.
+            m_Laser.enabled = vr && (!Drawing || hitting);
+            if (m_Laser.enabled)
             {
                 m_Laser.SetPosition(0, ray.origin);
                 m_Laser.SetPosition(1, point);
             }
             // The reticle is the only aim cue on a desktop; in VR it marks the hit point.
-            bool showReticle = !vr || hitDistance >= 0f;
+            bool showReticle = (!vr && !Drawing) || hitting;
             m_Reticle.SetActive(showReticle);
             if (showReticle)
             {

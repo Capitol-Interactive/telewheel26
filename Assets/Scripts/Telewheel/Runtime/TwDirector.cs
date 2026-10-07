@@ -141,6 +141,16 @@ namespace Telewheel
                 Log(line);
             }
             Log("Fonts: " + (TwFonts.CustomFontsLoaded ? "Lilita One and Nunito loaded" : "using the default font"));
+            if (!OpenBrushFacade.CanCreate)
+            {
+                Log("WARNING: Open Brush is in view-only mode, so nobody can draw. Run with a headset, "
+                    + "or start desktop mode (--Flags.EnableMonoscopicMode true, or hold M while pressing Play).");
+            }
+            else if (OpenBrushFacade.IsMonoscopic)
+            {
+                Log("Desktop mode: the mouse aims at buttons and a click presses them. Hold Alt and move "
+                    + "the mouse to look around. Enter submits a drawing.");
+            }
 
             UserConfig.TelewheelConfig settings = OpenBrushFacade.Settings;
             if (settings.DebugOverlay)
@@ -162,9 +172,9 @@ namespace Telewheel
             TwPrefs.Apply();
             TwAudio.Init(gameObject);
             TwFx.Init(gameObject);
-            gameObject.AddComponent<TwPointer>();
+            TwPointer pointer = gameObject.AddComponent<TwPointer>();
             int seed = settings.Seed != 0 ? settings.Seed : System.Environment.TickCount;
-            m_Game = new TwGame(this, Sketch, seed);
+            m_Game = new TwGame(this, Sketch, pointer, seed);
             m_Game.SetTimeScale(settings.TimeScale);
             if (settings.AutoPlay)
             {
@@ -182,6 +192,12 @@ namespace Telewheel
         {
             if (m_SelfTestRunning)
             {
+                return;
+            }
+            // The test wipes the canvas, so it must not run in the middle of a match.
+            if (m_Game != null && m_Game.Machine != null)
+            {
+                Log("The self-test only runs from the menus, not during a match.");
                 return;
             }
             m_SelfTestRunning = true;

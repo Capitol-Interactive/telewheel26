@@ -15,6 +15,7 @@
 using System.Collections.Generic;
 using TiltBrush;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Telewheel
 {
@@ -29,6 +30,7 @@ namespace Telewheel
 
         private readonly TwDirector m_Director;
         private readonly TwSketchService m_Sketch;
+        private readonly TwPointer m_Pointer;
         private readonly TwRandom m_UiRandom;
         private readonly TwFloorSquare m_Floor = new TwFloorSquare();
 
@@ -42,10 +44,11 @@ namespace Telewheel
         private bool m_EndingDrawTurn;
         private bool m_TitleConfettiShown;
 
-        public TwGame(TwDirector director, TwSketchService sketch, int seed)
+        public TwGame(TwDirector director, TwSketchService sketch, TwPointer pointer, int seed)
         {
             m_Director = director;
             m_Sketch = sketch;
+            m_Pointer = pointer;
             m_UiRandom = new TwRandom(seed ^ 0x5EED);
             m_Floor.SetVisible(false);
         }
@@ -233,6 +236,15 @@ namespace Telewheel
         public void Update(float dt)
         {
             float scaled = dt * m_TimeScale;
+            if (m_Pointer != null)
+            {
+                // While drawing, the mouse belongs to the brush and the laser stays out of the way.
+                m_Pointer.Drawing = IsDrawTurn;
+            }
+            if (IsDrawTurn && Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
+            {
+                Submit();
+            }
             if (m_Machine != null)
             {
                 m_Machine.Tick(scaled);
@@ -437,6 +449,8 @@ namespace Telewheel
             OpenBrushFacade.ResetWorldPose();
             OpenBrushFacade.SelectMarkerBrush();
             OpenBrushFacade.SetBrushColor(TwGfx.ToColor(TwTokens.Deep));
+            // Choosing a brush switches Open Brush back to its paint tool; lock it again until the countdown ends.
+            OpenBrushFacade.SetDrawingAllowed(false);
             m_Floor.PlaceAhead(OpenBrushFacade.Head);
             m_Floor.SetVisible(true);
             SetScreen(new TwDrawScreen(m_Machine, Submit));
@@ -560,6 +574,12 @@ namespace Telewheel
         {
             DisposeScreen();
             m_Screen = screen;
+            // Every screen but the menus gets a MENU button, since the hand menu is hidden between turns.
+            if (screen != null && !(screen is TwMainMenuScreen) && !(screen is TwSetupScreen)
+                && !(screen is TwSettingsScreen))
+            {
+                screen.AddMenuButton(ToggleSystemMenu);
+            }
         }
 
         public bool SystemMenuOpen

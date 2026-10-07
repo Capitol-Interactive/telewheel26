@@ -45,8 +45,13 @@ namespace Telewheel
         /// <summary>Removes the drawing, the undo history and any shown stage.</summary>
         public void Clear()
         {
+            // Open Brush's reset is heavy (it unloads assets), so skip it when there is nothing to wipe.
+            bool needed = m_Stage != null || OpenBrushFacade.ActiveStrokeCount > 0 || OpenBrushFacade.CanUndo;
             m_Stage = null;
-            OpenBrushFacade.ClearEverything();
+            if (needed)
+            {
+                OpenBrushFacade.ClearEverything();
+            }
         }
 
         /// <summary>

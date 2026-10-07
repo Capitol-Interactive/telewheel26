@@ -19,6 +19,7 @@ using System.Linq;
 using OpenBrush.Multiplayer;
 using TiltBrush;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
 namespace Telewheel
@@ -98,6 +99,15 @@ namespace Telewheel
             {
                 App.Instance.StateChanged -= handler;
             }
+        }
+
+        /// <summary>
+        /// False when Open Brush is running view-only (no headset and not in desktop mode): drawing
+        /// would not work, so the game says so.
+        /// </summary>
+        public static bool CanCreate
+        {
+            get { return App.AppAllowsCreation(); }
         }
 
         public static bool IsMonoscopic
@@ -267,6 +277,43 @@ namespace Telewheel
             return false;
         }
 
+        /// <summary>
+        /// Desktop mode only: the ray through a virtual mouse cursor. The mouse normally moves Open
+        /// Brush's own drawing reticle, so the game keeps its own cursor and moves it with the
+        /// mouse (unless Alt is held, which turns the camera instead).
+        /// </summary>
+        public static bool TryGetCursorRay(ref Vector2 cursor, bool moveCursor, out Ray ray)
+        {
+            Transform head = ViewpointScript.Head;
+            Camera camera = head == null ? null : head.GetComponent<Camera>();
+            if (camera == null)
+            {
+                camera = Camera.main;
+            }
+            if (camera == null)
+            {
+                return TryGetPointerRay(out ray);
+            }
+            if (moveCursor && Mouse.current != null && !CameraLookHeld)
+            {
+                cursor += Mouse.current.delta.ReadValue() * 1.5f;
+            }
+            cursor.x = Mathf.Clamp(cursor.x, 0f, Screen.width);
+            cursor.y = Mathf.Clamp(cursor.y, 0f, Screen.height);
+            ray = camera.ScreenPointToRay(new Vector3(cursor.x, cursor.y, 0f));
+            return true;
+        }
+
+        /// <summary>True while Alt is held, which makes the mouse turn the desktop camera.</summary>
+        public static bool CameraLookHeld
+        {
+            get
+            {
+                return InputManager.m_Instance.GetKeyboardShortcut(
+                    InputManager.KeyboardShortcut.PositionMonoCamera);
+            }
+        }
+
         public static bool PrimaryPressedThisFrame
         {
             get { return InputManager.m_Instance.GetCommandDown(InputManager.SketchCommands.Activate); }
@@ -329,7 +376,11 @@ namespace Telewheel
         /// </summary>
         public static void ClearEverything()
         {
+            // NewSketch also resets the "force painting" override, which the game uses to keep the
+            // canvas locked between turns, so put it back.
+            ApiManager.ForcePaintingMode forcePainting = ApiManager.Instance.ForcePainting;
             SketchControlsScript.m_Instance.NewSketch(fade: false);
+            ApiManager.Instance.ForcePainting = forcePainting;
         }
 
         /// <summary>Reads serialized strokes. Layer indices are squashed so no extra layers appear.</summary>

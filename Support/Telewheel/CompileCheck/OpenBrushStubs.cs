@@ -42,6 +42,7 @@ namespace TMPro
         public TMP_FontAsset font { get; set; }
         public Color32 outlineColor { get; set; }
         public float outlineWidth { get; set; }
+        public bool richText { get; set; }
         public RectTransform rectTransform { get { return null; } }
     }
     public class TextMeshPro : TMP_Text { }
@@ -50,12 +51,19 @@ namespace TMPro
 namespace UnityEngine.InputSystem
 {
     public class KeyControl { public bool wasPressedThisFrame { get { return false; } } }
+    public class Mouse
+    {
+        public static Mouse current { get { return null; } }
+        public Vector2Control delta { get { return null; } }
+    }
+    public class Vector2Control { public Vector2 ReadValue() { return default(Vector2); } }
     public class Keyboard
     {
         public static Keyboard current { get { return null; } }
         public KeyControl f8Key { get { return null; } }
         public KeyControl f9Key { get { return null; } }
         public KeyControl f10Key { get { return null; } }
+        public KeyControl enterKey { get { return null; } }
         public event Action<char> onTextInput;
     }
 }
@@ -159,6 +167,7 @@ namespace TiltBrush
         public static BrushColorController BrushColor { get { return null; } }
         public static VrSdk VrSdk { get { return null; } }
         public static AppState CurrentState { get { return AppState.Standard; } }
+        public static bool AppAllowsCreation() { return true; }
         public event Action<AppState, AppState> StateChanged;
     }
 
@@ -248,6 +257,8 @@ namespace TiltBrush
         public static InputManager m_Instance;
         public static ControllerInfo Brush { get { return null; } }
         public Transform GetBrushControllerAttachPoint() { return null; }
+        public enum KeyboardShortcut { PositionMonoCamera }
+        public bool GetKeyboardShortcut(KeyboardShortcut s) { return false; }
         public bool GetCommandDown(SketchCommands c) { return false; }
         public bool GetCommand(SketchCommands c) { return false; }
         public bool DisableKeyboardShortcuts { get; set; }

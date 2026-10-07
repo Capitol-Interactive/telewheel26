@@ -141,14 +141,16 @@ namespace Telewheel
             }, null);
             Check(report, "No stray layers", () =>
             {
-                int layers = App.Scene.LayerCanvases.Count();
-                return layers == 1 ? "1 stage layer" : "layers: " + layers;
+                // LayerCanvases always includes the main canvas, so a lone stage layer makes two.
+                int extra = App.Scene.LayerCanvases.Count() - 1;
+                return extra == 1 ? "1 stage layer" : "extra layers: " + extra;
             }, null);
             Check(report, "Hide shown drawing", () =>
             {
                 sketch.Clear();
-                return !sketch.IsShowing && App.Scene.LayerCanvases.Count() == 0 && OpenBrushFacade.ActiveStrokeCount == 0
-                    ? "clean" : "layers " + App.Scene.LayerCanvases.Count();
+                int extra = App.Scene.LayerCanvases.Count() - 1;
+                return !sketch.IsShowing && extra == 0 && OpenBrushFacade.ActiveStrokeCount == 0
+                    ? "clean" : "extra layers " + extra;
             }, null);
             yield return null;
 

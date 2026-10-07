@@ -44,6 +44,7 @@ namespace Telewheel
         private readonly TwRandom m_Random;
         private readonly Action<int> m_OnStopped;
         private bool m_Done;
+        private bool m_Armed;
 
         public TwSpinScreen(MatchMachine machine, TwRandom random, Action<int> onStopped, Action onGotIt)
             : base("Spin", 1.5f, 0f)
@@ -103,15 +104,22 @@ namespace Telewheel
             {
                 return;
             }
+            // The click that opened this screen (READY on the hand-off) may still be held; wait for
+            // the button to be let go before the wheel can be grabbed, so it is not grabbed by accident.
+            if (!OpenBrushFacade.PrimaryHeld)
+            {
+                m_Armed = true;
+            }
             Ray ray;
-            if (OpenBrushFacade.TryGetPointerRay(out ray))
+            if (m_Armed && OpenBrushFacade.TryGetPointerRay(out ray))
             {
                 bool grabbing = m_Wheel.UpdateGrab(
                     ray, OpenBrushFacade.PrimaryPressedThisFrame, OpenBrushFacade.PrimaryHeld, dt);
-                if (grabbing)
-                {
-                    m_SpinButton.SetInteractable(false);
-                }
+                m_SpinButton.SetInteractable(!grabbing && !m_Wheel.Spinning);
+            }
+            else
+            {
+                m_SpinButton.SetInteractable(m_Armed && !m_Wheel.Spinning);
             }
         }
 
@@ -154,6 +162,11 @@ namespace Telewheel
             card.Set(TwCopy.Draw.TrimEnd('.'), machine.PromptText ?? string.Empty);
             m_Submit = Button(TwCopy.Submit, 0.58f, -0.04f, 0.3f, 0.1f, TwButton.Style.Primary, onSubmit);
             m_Submit.SetInteractable(false);
+            if (OpenBrushFacade.IsMonoscopic)
+            {
+                TwUi.Text(T, "Enter submits", TwUi.Px(TwTokens.Label) * 1.1f, TwTokens.InkMuted,
+                    TwFonts.Body, new Vector3(0.58f, -0.12f, 0f));
+            }
         }
 
         public override void Tick(float dt)

@@ -121,6 +121,8 @@ namespace Telewheel
             tmp.font = font != null ? font : TMP_Settings.defaultFontAsset;
             tmp.fontSize = FontSize;
             tmp.enableAutoSizing = false;
+            // Players type some of this text, so never treat it as markup.
+            tmp.richText = false;
             tmp.color = TwGfx.ToColor(rgb);
             tmp.alignment = alignment;
             tmp.overflowMode = TextOverflowModes.Overflow;
