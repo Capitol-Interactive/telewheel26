@@ -2013,6 +2013,12 @@ namespace TiltBrush
                         "Documents");
                     break;
                 case RuntimePlatform.Android:
+                    // Telewheel: the app's own folder; no storage permission, and nothing to move.
+                    if (Telewheel.TelewheelBuild.IsQuestBuild)
+                    {
+                        m_UserPath = Application.persistentDataPath;
+                        break;
+                    }
                     m_UserPath = SteamManager.RunningUnderLepton
                         ? "/sdcard/Documents"
                         : "/sdcard/";

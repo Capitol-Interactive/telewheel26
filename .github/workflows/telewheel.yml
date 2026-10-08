@@ -50,6 +50,21 @@ jobs:
           P="dotnet run --project Support/Telewheel/SyntaxCheck --"
           $P "" $FILES
           $P "MP_PHOTON;FUSION_WEAVER;UNITY_ANDROID" $FILES
+      - name: The Quest build scripts parse, with and without the Quest define
+        # Unity compiles the Quest-only code in the "Android Meta Quest" row of
+        # the Builds workflow; this catches a typo in minutes instead. App.cs
+        # refuses to compile without a Unity version symbol, hence UNITY_...
+        run: |
+          E=Assets/Editor
+          FILES="$E/AndroidStoreManifest.cs $E/BuildTiltBrush.cs"
+          FILES="$FILES $E/BuildTiltBrushPostProcess.cs $E/Telewheel/*.cs"
+          FILES="$FILES Assets/Scripts/LoadingScene.cs Assets/Scripts/App.cs"
+          FILES="$FILES Assets/Scripts/Telewheel/Runtime/*.cs"
+          P="dotnet run --project Support/Telewheel/SyntaxCheck --"
+          V=UNITY_2020_3_OR_NEWER
+          $P "$V;UNITY_EDITOR" $FILES
+          $P "$V;UNITY_EDITOR;USE_QUEST_PACKAGE_NAME;UNITY_ANDROID" $FILES
+          $P "$V;USE_QUEST_PACKAGE_NAME;UNITY_ANDROID;MP_PHOTON" $FILES
       - name: The Photon setup script runs
         run: python3 -I Support/bin/setup-photon.py defines
       - name: MP_PHOTON must not be committed in the project settings
@@ -59,6 +74,17 @@ jobs:
           if grep -q "MP_PHOTON" ProjectSettings/ProjectSettings.asset; then
             echo "MP_PHOTON is in ProjectSettings.asset. Remove it with"
             echo "Telewheel > Online > Remove Photon Defines."
+            exit 1
+          fi
+      - name: The Quest build symbol must not be committed in the settings
+        # It belongs in local settings (Telewheel > Build > Set Up Quest
+        # Build) and in the CI's Android Meta Quest row. Committed, every
+        # Android build would become a Telewheel Quest build.
+        run: |
+          if grep -q "USE_QUEST_PACKAGE_NAME" \
+              ProjectSettings/ProjectSettings.asset; then
+            echo "USE_QUEST_PACKAGE_NAME is in ProjectSettings.asset."
+            echo "Remove it with Telewheel > Build > Remove Quest Build Setup."
             exit 1
           fi
       - name: Check .meta GUIDs are unique

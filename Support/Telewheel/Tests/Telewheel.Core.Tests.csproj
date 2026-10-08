@@ -13,6 +13,11 @@
 
   <ItemGroup>
     <Compile Include="../../../Assets/Tests/EditMode/Telewheel/**/*.cs" />
+    <!-- Tests of Editor-only code that uses nothing but System.Xml. They run here and not in the Unity Test
+         Runner, which cannot reference Editor code from a test assembly. -->
+    <Compile Include="EditorTests/**/*.cs" />
+    <Compile Include="../../../Assets/Editor/AndroidStoreManifest.cs" />
+    <Compile Include="../../../Assets/Editor/Telewheel/TelewheelAndroidManifest.cs" />
   </ItemGroup>
 
   <ItemGroup>

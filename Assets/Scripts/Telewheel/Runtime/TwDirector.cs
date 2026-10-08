@@ -134,6 +134,10 @@ namespace Telewheel
             Log("Open Brush is ready; entering Telewheel mode.");
             OpenBrushFacade.EnterGameMode();
             OpenBrushFacade.SetDrawingAllowed(false);
+            if (Application.platform == RuntimePlatform.Android)
+            {
+                Log("Refresh rate: " + OpenBrushFacade.RequestRefreshRate(90f));
+            }
             var hidden = new List<string>();
             TwModeAdapter.HideUnusedButtons(hidden);
             foreach (string line in hidden)

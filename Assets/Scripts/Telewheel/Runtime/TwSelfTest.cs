@@ -87,11 +87,7 @@ namespace Telewheel
                 bool ok = family >= need && raunchy >= need;
                 return ok ? family + " family, " + raunchy + " raunchy" : "family " + family + ", raunchy " + raunchy + ", need " + need;
             }, null);
-            Check(report, "UI shader", () =>
-            {
-                Shader shader = Shader.Find("Unlit/Color") ?? Shader.Find("Sprites/Default");
-                return shader == null ? null : shader.name;
-            }, null);
+            Check(report, "UI shader", () => TwGfx.ShaderName, null);
             Check(report, "Default font", () =>
             {
                 return TMPro.TMP_Settings.defaultFontAsset == null ? null : TMPro.TMP_Settings.defaultFontAsset.name;
@@ -106,6 +102,9 @@ namespace Telewheel
             {
                 return "passthrough " + (OpenBrushFacade.PassthroughSupported ? "supported" : "not supported on this device");
             }, null);
+            // Informational: both only mean something on a headset, and say what the runtime reported.
+            Check(report, "Refresh rate", () => OpenBrushFacade.RefreshRateStatus, null);
+            Check(report, "Hand tracking", () => OpenBrushFacade.HandInputStatus, null);
             Check(report, "Online", () =>
             {
                 // Informational: online play being unavailable is not a bug in the hooks.

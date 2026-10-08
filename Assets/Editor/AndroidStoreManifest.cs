@@ -12,7 +12,7 @@ internal static class AndroidStoreManifest
     internal const string AndroidNamespace = "http://schemas.android.com/apk/res/android";
     private const string ToolsNamespace = "http://schemas.android.com/tools";
 
-    internal static void Configure(XmlDocument doc, bool metaStore, bool androidXr)
+    internal static void Configure(XmlDocument doc, bool metaStore, bool androidXr, bool telewheel = false)
     {
         var root = doc.DocumentElement ?? throw new InvalidOperationException("Missing Android manifest.");
         root.SetAttribute("xmlns:tools", ToolsNamespace);
@@ -65,6 +65,12 @@ internal static class AndroidStoreManifest
         var headTracking = GetOrCreate(doc, root, "uses-feature", "android.hardware.vr.headtracking");
         SetAndroid(headTracking, "required", "true");
         SetAndroid(headTracking, "version", "1");
+
+        // Telewheel
+        if (telewheel)
+        {
+            TelewheelAndroidManifest.Apply(doc);
+        }
     }
 
     private static void SetMetadata(XmlDocument doc, XmlElement parent, string name, string value)

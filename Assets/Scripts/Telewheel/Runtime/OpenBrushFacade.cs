@@ -308,6 +308,11 @@ namespace Telewheel
                     return true;
                 }
             }
+            // No controller: a tracked hand points instead (Quest hand tracking).
+            if (!IsMonoscopic && TryGetHandRay(out ray))
+            {
+                return true;
+            }
             Transform head = ViewpointScript.Head;
             if (head != null)
             {
@@ -357,12 +362,12 @@ namespace Telewheel
 
         public static bool PrimaryPressedThisFrame
         {
-            get { return InputManager.m_Instance.GetCommandDown(InputManager.SketchCommands.Activate); }
+            get { return InputManager.m_Instance.GetCommandDown(InputManager.SketchCommands.Activate) || HandPinchPressedThisFrame; }
         }
 
         public static bool PrimaryHeld
         {
-            get { return InputManager.m_Instance.GetCommand(InputManager.SketchCommands.Activate); }
+            get { return InputManager.m_Instance.GetCommand(InputManager.SketchCommands.Activate) || HandPinchHeld; }
         }
 
         /// <summary>Stops Open Brush shortcuts (WASD, undo, ...) while the player is typing.</summary>

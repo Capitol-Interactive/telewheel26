@@ -28,6 +28,13 @@ namespace Telewheel
         private static TMP_FontAsset s_Body;
         private static TMP_FontAsset s_Bold;
 
+        // The font assets are dynamic: a glyph is drawn into the atlas the first time it is needed, which
+        // costs a visible hitch on a headset. These are generated up front, once, while the game starts:
+        // printable ASCII and the typographic marks the copy uses.
+        private const string PrewarmCharacters =
+            " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+            + "\u2018\u2019\u201C\u201D\u2013\u2014\u2026\u2022\u00D7";
+
         // Domain reload is off in this project, so drop cached assets when Play starts.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
@@ -82,6 +89,8 @@ namespace Telewheel
                 return cache;
             }
             asset.name = font.name + " (Telewheel)";
+            string missing;
+            asset.TryAddCharacters(PrewarmCharacters, out missing); // Anything the font lacks falls back, as before.
             if (fallback != null && asset.fallbackFontAssetTable != null)
             {
                 asset.fallbackFontAssetTable.Add(fallback);

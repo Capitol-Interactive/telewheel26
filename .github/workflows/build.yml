@@ -244,6 +244,7 @@ jobs:
             targetPlatform: StandaloneWindows64
             vrsdk: OpenXR
             cache: Windows
+            telewheel_photon: true  # Telewheel: fetch the public Photon mirror when there is no PHOTON_PAT
             extra_photon_defines: MP_PHOTON CROSS_PLATFORM_INPUT PHOTON_VOICE_DEFINED FUSION_WEAVER FUSION2 FUSION_2_1_OR_NEWER
 
           - name: Linux
@@ -310,6 +311,7 @@ jobs:
             extraoptions: -btb-il2cpp
             versionSuffix: 0
             extra_defines: USE_QUEST_PACKAGE_NAME
+            telewheel_photon: true  # Telewheel: fetch the public Photon mirror when there is no PHOTON_PAT
             extra_photon_defines: MP_PHOTON CROSS_PLATFORM_INPUT MOBILE_INPUT PHOTON_VOICE_DEFINED FUSION_WEAVER FUSION2 FUSION_2_1_OR_NEWER
 
           - name: iOS Viewer
@@ -415,6 +417,11 @@ jobs:
           echo "For debugging: these are the files in Assets/Photon:"
           find Assets/Photon
 
+      # Telewheel: the mirror is public, so a build with no PHOTON_PAT can still have online play.
+      - name: Fetch the public Photon SDK mirror (Telewheel rows without PHOTON_PAT)
+        if: ${{ !env.PHOTON_PAT && matrix.telewheel_photon }}
+        run: python3 Support/bin/setup-photon.py fetch
+
       - name: Restore Library/
         id: cache_library
         uses: actions/cache/restore@v6
@@ -515,8 +522,8 @@ jobs:
             echo -e "\n-define:$DEFINE" | tee -a Assets/csc.rsp
           done
 
-      - name: Update build matrix specific defines in csc.rsp (PHOTON_PAT only)
-        if: ${{ env.PHOTON_PAT && matrix.extra_photon_defines }}
+      - name: Update build matrix specific defines in csc.rsp (PHOTON_PAT, or a Telewheel row)
+        if: ${{ (env.PHOTON_PAT || matrix.telewheel_photon) && matrix.extra_photon_defines }}
         run: |
           for DEFINE in ${{ matrix.extra_photon_defines }}; do
             echo -e "\n-define:$DEFINE" | tee -a Assets/csc.rsp

@@ -26,12 +26,53 @@ namespace Telewheel
     {
         private static readonly Dictionary<uint, Material> s_Materials = new Dictionary<uint, Material>();
         private static Shader s_Shader;
+        private static bool s_ShaderSearched;
+
+        // In order of preference. A build only has a shader that something references or that is in
+        // Always Included Shaders (TelewheelBuildPrep makes sure the first ones are), so there are fallbacks.
+        private static readonly string[] ShaderNames =
+        {
+            "Unlit/Color", "Sprites/Default", "Hidden/Internal-Colored", "UI/Default",
+        };
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
             s_Materials.Clear();
             s_Shader = null;
+            s_ShaderSearched = false;
+        }
+
+        /// <summary>The shader the flat materials use, or null if this build has none of the candidates.</summary>
+        public static string ShaderName
+        {
+            get
+            {
+                FindShader();
+                return s_Shader == null ? null : s_Shader.name;
+            }
+        }
+
+        private static void FindShader()
+        {
+            if (s_Shader != null || s_ShaderSearched)
+            {
+                return;
+            }
+            s_ShaderSearched = true;
+            foreach (string name in ShaderNames)
+            {
+                s_Shader = Shader.Find(name);
+                if (s_Shader != null)
+                {
+                    if (name != ShaderNames[0])
+                    {
+                        Debug.LogWarning("[Telewheel] " + ShaderNames[0] + " is not in this build; using " + name + ".");
+                    }
+                    return;
+                }
+            }
+            Debug.LogError("[Telewheel] No unlit shader is available in this build, so the UI cannot be drawn.");
         }
 
         public static Color ToColor(uint rgb, float alpha = 1f)
@@ -48,13 +89,10 @@ namespace Telewheel
             {
                 return material;
             }
+            FindShader();
             if (s_Shader == null)
             {
-                s_Shader = Shader.Find("Unlit/Color");
-                if (s_Shader == null)
-                {
-                    s_Shader = Shader.Find("Sprites/Default");
-                }
+                return null; // Logged once by FindShader; every caller only assigns this to a renderer.
             }
             material = new Material(s_Shader) { color = ToColor(rgb) };
             material.name = "Telewheel flat " + rgb.ToString("X6");

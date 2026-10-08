@@ -28,6 +28,11 @@ namespace TMPro
     {
         public List<TMP_FontAsset> fallbackFontAssetTable;
         public static TMP_FontAsset CreateFontAsset(Font font) { return null; }
+        public bool TryAddCharacters(string characters, out string missingCharacters, bool includeFontFeatures = false)
+        {
+            missingCharacters = null;
+            return true;
+        }
     }
     public static class TMP_Settings { public static TMP_FontAsset defaultFontAsset { get { return null; } } }
     public abstract class TMP_Text : MonoBehaviour
@@ -57,6 +62,20 @@ namespace UnityEngine.InputSystem
         public Vector2Control delta { get { return null; } }
     }
     public class Vector2Control { public Vector2 ReadValue() { return default(Vector2); } }
+    public struct InternedString { public override string ToString() { return string.Empty; } }
+    public abstract class InputControl
+    {
+        public string layout { get { return string.Empty; } }
+        public string path { get { return string.Empty; } }
+        public InternedString[] usages { get { return null; } }
+        public TControl TryGetChildControl<TControl>(string path) where TControl : InputControl { return null; }
+    }
+    public abstract class InputControl<TValue> : InputControl where TValue : struct
+    {
+        public TValue ReadValue() { return default(TValue); }
+    }
+    public class InputDevice : InputControl { public bool added { get { return false; } } }
+    public static class InputSystem { public static InputDevice[] devices { get { return null; } } }
     public class Keyboard
     {
         public static Keyboard current { get { return null; } }
@@ -65,6 +84,18 @@ namespace UnityEngine.InputSystem
         public KeyControl f10Key { get { return null; } }
         public KeyControl enterKey { get { return null; } }
         public event Action<char> onTextInput;
+    }
+}
+
+namespace OpenXR.Extensions
+{
+    // The project's OpenXR extensions package (dev.mikesky.openxrextensions); only what Telewheel calls.
+    public class FBDisplayRefreshRate
+    {
+        public delegate void DisplayRefreshRateChanged(float fromDisplayRefreshRate, float toDisplayRefreshRate);
+        public static DisplayRefreshRateChanged OnDisplayRefreshRateChanged;
+        public static float DisplayRefreshRate { get { return 0f; } set { } }
+        public static float[] GetDisplayRefreshRates() { return null; }
     }
 }
 
@@ -189,7 +220,7 @@ namespace TiltBrush
         public void ResetLayers(bool notify = false) { }
     }
     public enum PassthroughMode { None, FBPassthrough, OpenXREnvionmentBlendMode, Zapbox }
-    public class VrSdk { public PassthroughMode PassthroughMode { get; private set; } }
+    public class VrSdk { public PassthroughMode PassthroughMode { get; private set; } public Camera GetVrCamera() { return null; } }
     public class Environment : ScriptableObject { public bool isPassthrough; }
     public class EnvironmentCatalog : MonoBehaviour
     {
