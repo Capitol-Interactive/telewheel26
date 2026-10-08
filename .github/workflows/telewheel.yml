@@ -20,6 +20,7 @@ on:  # yamllint disable-line rule:truthy
       - 'Assets/Scripts/App.cs'
       - 'Assets/Scripts/LoadingScene.cs'
       - 'Support/Python/telewheel_check_manifest.py'
+      - 'Support/Python/test_telewheel_check_manifest.py'
       - 'ProjectSettings/ProjectSettings.asset'
       - '.github/workflows/telewheel.yml'
   push:
@@ -74,6 +75,8 @@ jobs:
           $P "$V;USE_QUEST_PACKAGE_NAME;UNITY_ANDROID;MP_PHOTON" $FILES
       - name: The Photon setup script runs
         run: python3 -I Support/bin/setup-photon.py defines
+      - name: The manifest checker reads aapt2-style dumps
+        run: python3 -I Support/Python/test_telewheel_check_manifest.py
       - name: MP_PHOTON must not be committed in the project settings
         # A local setting for people with the Photon SDK; committed, it
         # would break every build that does not have the SDK.

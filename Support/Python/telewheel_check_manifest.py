@@ -22,8 +22,10 @@ Quest build must, and must not, contain.
 
     telewheel_check_manifest.py DUMP.txt      print a Markdown report, exit 1 if anything is wrong
 
-The checks are plain substring searches on purpose: they do not depend on how aapt2 lays the
-tree out, only on the strings being present in the manifest.
+The pass/fail checks are plain substring searches on purpose: they do not depend on how aapt2 lays
+the tree out, only on the strings being present in the manifest. The information rows (whether the
+passthrough and hand-tracking features are optional, which activity launches the app) do read the
+tree, so a layout surprise can only make them say "not confirmed", never fail the build.
 """
 
 import argparse
@@ -49,8 +51,8 @@ FORBIDDEN = {
     "Legacy external storage": "requestLegacyExternalStorage",
 }
 
-# Entries that must be optional, so the app still installs without them. aapt2 prints a false boolean as
-# "(type 0x12)0x0". Only reported: the dump's layout is not something to fail a build over.
+# Entries that must be optional, so the app still installs without them. Only reported: the dump's
+# layout is not something to fail a build over.
 OPTIONAL_FEATURES = {
     "Passthrough is optional": "com.oculus.feature.PASSTHROUGH",
     "Hand tracking is optional": "oculus.software.handtracking",
@@ -58,6 +60,65 @@ OPTIONAL_FEATURES = {
 
 # Shown for information, not checked: which activity launches the app.
 ACTIVITIES = ("UnityPlayerActivity", "UnityPlayerGameActivity")
+
+ELEMENT = re.compile(r"^(?P<indent>\s*)E: (?P<tag>[\w:.-]+)")
+# aapt2 prints an attribute as: A: [namespace:]name[(0xID)]=VALUE [(Raw: "...")]
+ATTRIBUTE = re.compile(
+    r"^(?P<indent>\s*)A: (?:[^\s=(]+:)?(?P<name>[^\s=(:]+)(?:\(0x[0-9a-fA-F]+\))?=(?P<value>.*)$"
+)
+QUOTED = re.compile(r'^"((?:[^"\\]|\\.)*)"')
+TYPED_NUMBER = re.compile(r"^\(type:? 0x[0-9a-fA-F]+\)\s*(0x[0-9a-fA-F]+)")
+WORD_BOOLEAN = re.compile(r"^(true|false)(?:\s|$)")
+
+
+class Element:
+    """One element of the dumped manifest, with its attributes (raw text) and children."""
+
+    def __init__(self, tag, indent):
+        self.tag = tag
+        self.indent = indent
+        self.attributes = {}
+        self.children = []
+
+    def walk(self):
+        yield self
+        for child in self.children:
+            yield from child.walk()
+
+    def text(self, name):
+        """A string attribute's value without its quotes, or None."""
+        match = QUOTED.match(self.attributes.get(name, ""))
+        return match.group(1) if match else None
+
+    def boolean(self, name):
+        """True or False for a boolean attribute, None when it is absent or not understood."""
+        value = self.attributes.get(name, "").strip()
+        match = TYPED_NUMBER.match(value)
+        if match:
+            return int(match.group(1), 16) != 0
+        match = WORD_BOOLEAN.match(value)
+        return match.group(1) == "true" if match else None
+
+
+def parse(text):
+    """The elements of an `aapt2 dump xmltree` listing, as a list of root elements."""
+    roots = []
+    stack = []
+    for line in text.splitlines():
+        element = ELEMENT.match(line)
+        attribute = None if element else ATTRIBUTE.match(line)
+        if not element and not attribute:
+            continue
+        indent = len((element or attribute).group("indent"))
+        while stack and stack[-1].indent >= indent:
+            stack.pop()
+        if element:
+            node = Element(element.group("tag"), indent)
+            (stack[-1].children if stack else roots).append(node)
+            stack.append(node)
+        elif stack:
+            stack[-1].attributes[attribute.group("name")] = attribute.group("value")
+    return roots
 
 
 def check(text):
@@ -72,38 +133,64 @@ def check(text):
     return rows, all(passed for _, passed, _ in rows)
 
 
-def optional_rows(text):
+def optional_state(features):
+    """What to say about the `required` attribute of the uses-feature elements for one feature."""
+    if not features:
+        return "not found as a uses-feature"
+    states = [feature.boolean("required") for feature in features]
+    if any(state is True for state in states):
+        return "required=TRUE"
+    if all(state is False for state in states):
+        return "required=false"
+    raw = features[0].attributes.get("required")
+    if raw is None:
+        return "required is not set (the default is true)"
+    # Show what was there, so the next run says how aapt2 prints it.
+    return "not confirmed (could not read: %s)" % raw.replace("`", "'")[:80]
+
+
+def optional_rows(roots):
     """Information rows: is each feature's `required` attribute false? Never a failure."""
+    elements = [node for root in roots for node in root.walk()]
     rows = []
-    blocks = re.split(r"(?m)^\s*(?=E: )", text)
     for label, name in OPTIONAL_FEATURES.items():
-        state = "not confirmed (could not read the attribute)"
-        for block in blocks:
-            if (
-                name not in block
-                or "uses-feature" not in block.split("\n", maxsplit=1)[0]
-            ):
-                continue
-            match = re.search(
-                r"required\(0x[0-9a-fA-F]+\)=\(type 0x12\)(0x[0-9a-fA-F]+)", block
-            )
-            if match:
-                state = (
-                    "required=false"
-                    if int(match.group(1), 16) == 0
-                    else "required=TRUE"
-                )
-            break
-        rows.append((label, "info", state))
+        features = [
+            node
+            for node in elements
+            if node.tag == "uses-feature" and node.text("name") == name
+        ]
+        rows.append((label, "info", optional_state(features)))
     return rows
 
 
+def launchers(roots):
+    """Class names of the activities with a MAIN action and a LAUNCHER category."""
+    names = []
+    for root in roots:
+        for node in root.walk():
+            if node.tag not in ("activity", "activity-alias"):
+                continue
+            filters = [child for child in node.children if child.tag == "intent-filter"]
+            for intent in filters:
+                values = {
+                    child.text("name")
+                    for child in intent.children
+                    if child.tag in ("action", "category")
+                }
+                if {
+                    "android.intent.action.MAIN",
+                    "android.intent.category.LAUNCHER",
+                } <= values:
+                    names.append(node.text("name") or "(unnamed)")
+    return names
+
+
 def activities(text):
-    """The launcher activity classes mentioned in the dump, in order of first appearance."""
+    """The Unity activity classes mentioned in the dump, in order of first appearance."""
     return [name for name in ACTIVITIES if name in text]
 
 
-def report(rows, ok, found_activities):
+def report(rows, ok, found_activities, found_launchers):
     lines = [
         "## Telewheel Quest manifest: " + ("OK" if ok else "PROBLEMS"),
         "",
@@ -115,6 +202,7 @@ def report(rows, ok, found_activities):
         result = passed if isinstance(passed, str) else ("pass" if passed else "FAIL")
         lines.append("| %s | %s | `%s` |" % (label, result, detail))
     lines.append("")
+    lines.append("Launcher activity: " + (", ".join(found_launchers) or "not found"))
     lines.append("Activities mentioned: " + (", ".join(found_activities) or "none"))
     return "\n".join(lines)
 
@@ -135,7 +223,8 @@ def main(argv=None):
         print("The manifest dump is empty.", file=sys.stderr)
         return 1
     rows, ok = check(text)
-    print(report(rows + optional_rows(text), ok, activities(text)))
+    roots = parse(text)
+    print(report(rows + optional_rows(roots), ok, activities(text), launchers(roots)))
     return 0 if ok else 1
 
 
