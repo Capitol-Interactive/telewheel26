@@ -244,6 +244,7 @@ jobs:
             targetPlatform: StandaloneWindows64
             vrsdk: OpenXR
             cache: Windows
+            telewheel_photon: true  # Telewheel: fetch the public Photon mirror when there is no PHOTON_PAT
             extra_photon_defines: MP_PHOTON CROSS_PLATFORM_INPUT PHOTON_VOICE_DEFINED FUSION_WEAVER FUSION2 FUSION_2_1_OR_NEWER
 
           - name: Linux
@@ -301,7 +302,7 @@ jobs:
             extra_defines: OPEN_BRUSH_VIEWER
             extra_photon_defines: MP_PHOTON CROSS_PLATFORM_INPUT MOBILE_INPUT PHOTON_VOICE_DEFINED FUSION_WEAVER FUSION2 FUSION_2_1_OR_NEWER
 
-          # The Meta store requires its original application ID, irrespective of the XR loader.
+          # The Telewheel Quest build (USE_QUEST_PACKAGE_NAME) has its own id, com.capitolinteractive.telewheel; Open Brush's release and store jobs further down only run in the upstream repository.
           - name: Android Meta Quest
             targetPlatform: Android
             androidTargetSdkVersion: AndroidApiLevel34  # Meta upload validation rejects SDK 35; keep this separate from Google Play.
@@ -310,6 +311,7 @@ jobs:
             extraoptions: -btb-il2cpp
             versionSuffix: 0
             extra_defines: USE_QUEST_PACKAGE_NAME
+            telewheel_photon: true  # Telewheel: fetch the public Photon mirror when there is no PHOTON_PAT
             extra_photon_defines: MP_PHOTON CROSS_PLATFORM_INPUT MOBILE_INPUT PHOTON_VOICE_DEFINED FUSION_WEAVER FUSION2 FUSION_2_1_OR_NEWER
 
           - name: iOS Viewer
@@ -415,6 +417,17 @@ jobs:
           echo "For debugging: these are the files in Assets/Photon:"
           find Assets/Photon
 
+      # Telewheel: the mirror is public, so a build with no PHOTON_PAT can still have online play.
+      - name: Fetch the public Photon SDK mirror (Telewheel rows without PHOTON_PAT)
+        if: ${{ !env.PHOTON_PAT && matrix.telewheel_photon }}
+        run: |
+          for attempt in 1 2 3; do
+            python3 Support/bin/setup-photon.py fetch --force && exit 0
+            echo "Attempt $attempt failed; trying again."
+            sleep 20
+          done
+          exit 1
+
       - name: Restore Library/
         id: cache_library
         uses: actions/cache/restore@v6
@@ -515,8 +528,8 @@ jobs:
             echo -e "\n-define:$DEFINE" | tee -a Assets/csc.rsp
           done
 
-      - name: Update build matrix specific defines in csc.rsp (PHOTON_PAT only)
-        if: ${{ env.PHOTON_PAT && matrix.extra_photon_defines }}
+      - name: Update build matrix specific defines in csc.rsp (PHOTON_PAT, or a Telewheel row)
+        if: ${{ (env.PHOTON_PAT || matrix.telewheel_photon) && matrix.extra_photon_defines }}
         run: |
           for DEFINE in ${{ matrix.extra_photon_defines }}; do
             echo -e "\n-define:$DEFINE" | tee -a Assets/csc.rsp
@@ -578,6 +591,36 @@ jobs:
           path: |
             build/${{ matrix.vrsdk }}
             !build/**/*_BackUpThisFolder_ButDontShipItWithYourGame
+
+      # Telewheel: read the merged manifest of the finished Quest APK, so a manifest problem shows up on
+      # the pull request without waiting for telewheel-quest-inspect.yml (which only runs once merged).
+      - name: Check the Telewheel Quest manifest
+        if: matrix.name == 'Android Meta Quest'
+        continue-on-error: true  # An aapt2 layout surprise must not fail the build; the report is in the job summary
+        shell: bash
+        run: |
+          mapfile -d '' APKS < <(find build -name '*.apk' -print0 | sort -z)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::warning::No APK was built, so there is no manifest to check."
+            exit 0
+          fi
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -n 1)
+          echo "Inspecting ${APKS[0]} with $AAPT2"
+          "$AAPT2" dump xmltree --file AndroidManifest.xml "${APKS[0]}" > manifest-dump.txt
+          status=0
+          python3 -I Support/Python/telewheel_check_manifest.py manifest-dump.txt > manifest-report.md || status=1
+          {
+            cat manifest-report.md
+            echo
+            echo "<details><summary>The full manifest</summary>"
+            echo
+            echo '```'
+            cat manifest-dump.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat manifest-report.md
+          exit "$status"
 
       - name: Check if packages-lock.json has changed or if it's cacheable
         if: false

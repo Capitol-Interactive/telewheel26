@@ -46,11 +46,13 @@ public class BuildTiltBrushPostProcess
 
 #if USE_QUEST_PACKAGE_NAME
             const bool metaStore = true;
+            const bool telewheel = true; // Telewheel
 #else
             const bool metaStore = false;
+            const bool telewheel = false;
 #endif
             AndroidStoreManifest.Configure(doc, metaStore,
-                BuildTiltBrush.CurrentBuildXrSdk == TiltBrush.XrSdkMode.AndroidXR);
+                BuildTiltBrush.CurrentBuildXrSdk == TiltBrush.XrSdkMode.AndroidXR, telewheel);
 
             doc.Save(file);
             UnityEngine.Debug.Log($"[OB-STORE-MANIFEST] Applied Android manifest settings: " +

@@ -71,7 +71,8 @@ namespace TiltBrush
             DontDestroyOnLoad(gameObject);
 
 #if UNITY_ANDROID
-            if (Application.platform == RuntimePlatform.Android)
+            // Telewheel: the Quest build keeps its data in the app's own folder, so there is nothing to ask for.
+            if (Application.platform == RuntimePlatform.Android && !global::Telewheel.TelewheelBuild.IsQuestBuild)
             {
                 if (!UserHasManageExternalStoragePermission())
                 {

@@ -246,6 +246,12 @@ namespace OpenBrush.Multiplayer
                 );
                 App.Scene.AsScene[rightHandTransform] = remoteRightTR;
 
+                // Telewheel: a player who picked an icon wears its colour (stored as icon + 1).
+                if (oculusPlayerId > 0 && MultiplayerManager.AvatarIconColor != null)
+                {
+                    originalColor = MultiplayerManager.AvatarIconColor((int)oculusPlayerId - 1);
+                }
+
                 //HMD color
                 if (isReceivingVoiceTransmission) FadeHMDMeshColor(Color.red);
                 else FadeHMDMeshColor(originalColor);

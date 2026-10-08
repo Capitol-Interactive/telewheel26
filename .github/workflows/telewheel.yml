@@ -1,0 +1,98 @@
+---
+name: telewheel
+
+on:  # yamllint disable-line rule:truthy
+  pull_request:
+    paths:
+      - 'Assets/Scripts/Telewheel/**'
+      - 'Assets/Tests/EditMode/Telewheel/**'
+      - 'Assets/Resources/Telewheel/**'
+      - 'Support/Telewheel/**'
+      - 'Support/Python/telewheel_meta.py'
+      - 'Support/bin/setup-photon.py'
+      - 'Assets/Scripts/Multiplayer/**'
+      - 'Assets/Scripts/SketchControlsScript.cs'
+      - 'Assets/Editor/TelewheelPhotonSetup.cs'
+      - 'Assets/Editor/Telewheel/**'
+      - 'Assets/Editor/AndroidStoreManifest.cs'
+      - 'Assets/Editor/BuildTiltBrush.cs'
+      - 'Assets/Editor/BuildTiltBrushPostProcess.cs'
+      - 'Assets/Scripts/App.cs'
+      - 'Assets/Scripts/LoadingScene.cs'
+      - 'Support/Python/telewheel_check_manifest.py'
+      - 'ProjectSettings/ProjectSettings.asset'
+      - '.github/workflows/telewheel.yml'
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  telewheel:
+    # No Unity licence needed. Checks the game rules, the Unity-facing code
+    # (compiled against stand-ins for Open Brush) and the .meta files.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: '8.0.x'
+      - name: Unit tests for the game rules
+        run: dotnet test Support/Telewheel/Tests/Telewheel.Core.Tests.csproj
+      - name: Compile the Unity-facing code outside Unity
+        working-directory: Support/Telewheel/CompileCheck
+        run: dotnet build Telewheel.CompileCheck.csproj
+      - name: Compile it again as a Photon build (MP_PHOTON defined)
+        working-directory: Support/Telewheel/CompileCheck
+        run: |
+          dotnet build --no-incremental Telewheel.CompileCheck.csproj \
+            -p:DefineConstants=MP_PHOTON
+      - name: Open Brush's multiplayer files parse, with and without Photon
+        # Unity compiles them, and only with the SDK, so CI checks syntax.
+        run: |
+          M=Assets/Scripts/Multiplayer
+          FILES="$M/*.cs $M/Photon/*.cs"
+          FILES="$FILES Assets/Scripts/SketchControlsScript.cs"
+          FILES="$FILES Assets/Scripts/UserConfig.cs"
+          P="dotnet run --project Support/Telewheel/SyntaxCheck --"
+          $P "" $FILES
+          $P "MP_PHOTON;FUSION_WEAVER;UNITY_ANDROID" $FILES
+      - name: The Quest build scripts parse, with and without the Quest define
+        # Unity compiles the Quest-only code in the "Android Meta Quest" row of
+        # the Builds workflow; this catches a typo in minutes instead. App.cs
+        # refuses to compile without a Unity version symbol, hence UNITY_...
+        run: |
+          E=Assets/Editor
+          FILES="$E/AndroidStoreManifest.cs $E/BuildTiltBrush.cs"
+          FILES="$FILES $E/BuildTiltBrushPostProcess.cs $E/Telewheel/*.cs"
+          FILES="$FILES Assets/Scripts/LoadingScene.cs Assets/Scripts/App.cs"
+          FILES="$FILES Assets/Scripts/Telewheel/Runtime/*.cs"
+          P="dotnet run --project Support/Telewheel/SyntaxCheck --"
+          V=UNITY_2020_3_OR_NEWER
+          $P "$V;UNITY_EDITOR" $FILES
+          $P "$V;UNITY_EDITOR;USE_QUEST_PACKAGE_NAME;UNITY_ANDROID" $FILES
+          $P "$V;USE_QUEST_PACKAGE_NAME;UNITY_ANDROID;MP_PHOTON" $FILES
+      - name: The Photon setup script runs
+        run: python3 -I Support/bin/setup-photon.py defines
+      - name: MP_PHOTON must not be committed in the project settings
+        # A local setting for people with the Photon SDK; committed, it
+        # would break every build that does not have the SDK.
+        run: |
+          if grep -q "MP_PHOTON" ProjectSettings/ProjectSettings.asset; then
+            echo "MP_PHOTON is in ProjectSettings.asset. Remove it with"
+            echo "Telewheel > Online > Remove Photon Defines."
+            exit 1
+          fi
+      - name: The Quest build symbol must not be committed in the settings
+        # It belongs in local settings (Telewheel > Build > Set Up Quest
+        # Build) and in the CI's Android Meta Quest row. Committed, every
+        # Android build would become a Telewheel Quest build.
+        run: |
+          if grep -q "USE_QUEST_PACKAGE_NAME" \
+              ProjectSettings/ProjectSettings.asset; then
+            echo "USE_QUEST_PACKAGE_NAME is in ProjectSettings.asset."
+            echo "Remove it with Telewheel > Build > Remove Quest Build Setup."
+            exit 1
+          fi
+      - name: Check .meta GUIDs are unique
+        run: python3 Support/Python/telewheel_meta.py check

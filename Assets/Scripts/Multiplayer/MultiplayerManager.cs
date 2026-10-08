@@ -39,12 +39,49 @@ namespace OpenBrush.Multiplayer
         public MultiplayerType m_MultiplayerType;
         public event Action Disconnected;
 
+        // Telewheel: the game runs its own match over the room, so Open Brush must not share the
+        // sketch (strokes, undo, redo, the canvas for late joiners) while this is set.
+        public bool SuppressCommandSharing;
+
+        // Telewheel: voice trouble (no permission, no voice server) must not stop a room being joined.
+        public bool VoiceIsOptional;
+
+        // Telewheel: whether joining a room opens the microphone straight away.
+        public bool StartMicrophoneOnJoin = true;
+
+        // Telewheel: messages from the other players, for the game on top. The sender is not given: the
+        // transport cannot be trusted to say (see IDataConnectionHandler.CustomDataReceived).
+        public Action<byte[]> customDataReceived;
+
+        // Telewheel: pin Photon to one region (e.g. "eu") for both the room and voice, so two players
+        // cannot each end up creating a room of the same name in different regions. Empty = best ping.
+        public string Region = "";
+
+        // Telewheel: the player's icon number (0 up), or -1 for none. It travels in the unused
+        // OculusPlayerId field (as number + 1, so 0 still means "no icon") and the others' avatars
+        // are tinted by AvatarIconColor, which the game provides.
+        public int AvatarIconIndex = -1;
+        public static Func<int, Color> AvatarIconColor;
+
+        /// <summary>True while a room is joined and the sketch is being shared with it.</summary>
+        public bool IsSharingSketch
+        {
+            get { return State == ConnectionState.IN_ROOM && !SuppressCommandSharing; }
+        }
+
         private IDataConnectionHandler m_Manager;
         private IVoiceConnectionHandler m_VoiceManager;
 
         public ITransientData<PlayerRigData> m_LocalPlayer;
         [HideInInspector] public RemotePlayers m_RemotePlayers;
         public int LocalPlayerId => m_LocalPlayer?.PlayerId ?? -1;
+
+        // Telewheel: this device's id in the room as soon as the room is joined. LocalPlayerId above
+        // waits for the player's avatar to spawn, which comes later and is not needed to send messages.
+        public int LocalNetworkPlayerId => m_Manager?.GetLocalPlayerId() ?? -1;
+
+        // Telewheel: false when Photon could not even start (no secrets, say), and there is nothing to retry.
+        public bool HasConnectionHandler => m_Manager != null;
 
         public Action<int, ITransientData<PlayerRigData>> localPlayerJoined;
         public Action<RemotePlayer> remotePlayerJoined;
@@ -136,21 +173,35 @@ namespace OpenBrush.Multiplayer
             {
                 case MultiplayerType.Photon:
 #if MP_PHOTON
-                    m_Manager = new PhotonManager(this);
-                    m_Manager.Disconnected += OnConnectionHandlerDisconnected;
-                    if (m_Manager != null) ControllerConsoleScript.m_Instance.AddNewLine("PhotonManager Loaded");
-                    else ControllerConsoleScript.m_Instance.AddNewLine("PhotonManager Not Loaded");
+                    // Telewheel: a missing Photon secret used to throw here and leave the manager stuck
+                    // at INITIALIZING with half its parts; now it is a clean ERROR with a reason.
+                    try
+                    {
+                        m_Manager = new PhotonManager(this);
+                        m_Manager.Disconnected += OnConnectionHandlerDisconnected;
+                        if (m_Manager != null) ControllerConsoleScript.m_Instance.AddNewLine("PhotonManager Loaded");
+                        else ControllerConsoleScript.m_Instance.AddNewLine("PhotonManager Not Loaded");
+                        m_VoiceManager = new PhotonVoiceManager(this);
+                        if (m_VoiceManager != null) ControllerConsoleScript.m_Instance.AddNewLine("PhotonVoiceManager Loaded");
+                        else ControllerConsoleScript.m_Instance.AddNewLine("PhotonVoiceManager Not Loaded");
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError($"[MultiplayerManager] Could not start Photon: {e.Message}");
+                        m_Manager = null;
+                        m_VoiceManager = null;
+                        LastError = $"Could not start Photon: {e.Message}";
+                        State = ConnectionState.ERROR;
+                        return;
+                    }
 #endif
-#if MP_PHOTON
-                    m_VoiceManager = new PhotonVoiceManager(this);
-                    if (m_VoiceManager != null) ControllerConsoleScript.m_Instance.AddNewLine("PhotonVoiceManager Loaded");
-                    else ControllerConsoleScript.m_Instance.AddNewLine("PhotonVoiceManager Not Loaded");
-#endif 
                     break;
                 default:
                     return;
             }
             if (m_VoiceManager != null && m_Manager != null) State = ConnectionState.INITIALIZED;
+            // Telewheel
+            if (m_Manager != null) m_Manager.CustomDataReceived += OnCustomDataReceived;
 
             roomDataRefreshed += OnRoomDataRefreshed;
             localPlayerJoined += OnLocalPlayerJoined;
@@ -166,6 +217,7 @@ namespace OpenBrush.Multiplayer
 
         void OnDestroy()
         {
+            if (m_Manager != null) m_Manager.CustomDataReceived -= OnCustomDataReceived; // Telewheel
             roomDataRefreshed -= OnRoomDataRefreshed;
             localPlayerJoined -= OnLocalPlayerJoined;
             remotePlayerJoined -= OnRemotePlayerJoined;
@@ -187,6 +239,9 @@ namespace OpenBrush.Multiplayer
 
             var successVoice = false;
             if (m_VoiceManager != null) successVoice = await m_VoiceManager.Connect();
+
+            // Telewheel: without voice the game still works.
+            if (VoiceIsOptional) successVoice = true;
 
             if (!successData)
             {
@@ -210,14 +265,19 @@ namespace OpenBrush.Multiplayer
 
             // check if room exist to determine if user is room owner
             DoesRoomNameExist(RoomData.roomName);
-            if (!isUserRoomOwner) SketchMemoryScript.m_Instance.ClearMemory();
+            // Telewheel: a game match has no shared sketch to clear.
+            if (!isUserRoomOwner && !SuppressCommandSharing) SketchMemoryScript.m_Instance.ClearMemory();
 
             bool successData = false;
             if (m_Manager != null) successData = await m_Manager.JoinRoom(RoomData);
 
             bool successVoice = false;
             if (m_VoiceManager != null) successVoice = await m_VoiceManager.JoinRoom(RoomData);
-            m_VoiceManager?.StartSpeaking();
+            // Telewheel: the microphone is optional (the recorder transmits by default, so say so either way).
+            if (StartMicrophoneOnJoin) m_VoiceManager?.StartSpeaking();
+            else m_VoiceManager?.StopSpeaking();
+            // Telewheel: without voice the game still works.
+            if (VoiceIsOptional) successVoice = true;
 
             if (!successData)
             {
@@ -231,8 +291,10 @@ namespace OpenBrush.Multiplayer
             }
             else State = ConnectionState.IN_ROOM;
 
-            //asing the room name to the current room name
-            RoomCreateData CurrentRoomData = RoomData;
+            // Telewheel: this used to declare a local that hid the field, so the room's settings
+            // (silent, view only) were never remembered.
+            CurrentRoomData = RoomData;
+            CurrentRoomName = RoomData.roomName;
 
             return successData & successVoice;
         }
@@ -247,6 +309,8 @@ namespace OpenBrush.Multiplayer
             bool successVoice = false;
             m_VoiceManager?.StopSpeaking();
             if (m_VoiceManager != null) successVoice = await m_VoiceManager.LeaveRoom();
+            // Telewheel: leaving a match must work whatever the voice side did.
+            if (VoiceIsOptional) successVoice = true;
 
             if (!successData)
             {
@@ -272,6 +336,8 @@ namespace OpenBrush.Multiplayer
 
             bool successVoice = false;
             if (m_VoiceManager != null) successVoice = await m_VoiceManager.Disconnect();
+            // Telewheel: the same as in LeaveRoom.
+            if (VoiceIsOptional) successVoice = true;
 
             if (!successData)
             {
@@ -347,8 +413,9 @@ namespace OpenBrush.Multiplayer
         // Not really a multiplayer function but placing it here for consistency with other methods
         public void MutePlayerForMe(bool muted, int playerId)
         {
-            GetPlayerById(playerId).m_IsMutedForMe = muted;
-            MultiplayerAudioSourcesManager.m_Instance.SetMuteForPlayer(playerId, muted);
+            RemotePlayer player = GetPlayerById(playerId);
+            if (player != null) player.m_IsMutedForMe = muted; // Telewheel: null when the avatar has not spawned
+            MultiplayerAudioSourcesManager.m_Instance?.SetMuteForPlayer(playerId, muted);
         }
 
         public void MutePlayerForAll(bool muted, int playerId)
@@ -420,8 +487,8 @@ namespace OpenBrush.Multiplayer
                 },
                 ExtraData = new ExtraData
                 {
-                    // Kept at 0 so the networked payload shape is unchanged.
-                    OculusPlayerId = 0,
+                    // Telewheel: 0 (as before) unless the game gave this player an icon.
+                    OculusPlayerId = AvatarIconIndex >= 0 ? (ulong)(AvatarIconIndex + 1) : 0UL,
                 },
                 IsRoomOwner = isUserRoomOwner,
                 SceneScale = App.Scene.Pose.scale,
@@ -452,8 +519,8 @@ namespace OpenBrush.Multiplayer
         {
             // the user is the room owner if is the firt to get in 
             isUserRoomOwner = m_Manager.GetPlayerCount() == 1 ? true : false;
-            // if not room owner clear scene 
-            if (!isUserRoomOwner) SketchMemoryScript.m_Instance.ClearMemory();
+            // if not room owner clear scene (Telewheel: not when a game match is using the room)
+            if (!isUserRoomOwner && !SuppressCommandSharing) SketchMemoryScript.m_Instance.ClearMemory();
 
             m_LocalPlayer = playerData;
             m_LocalPlayer.PlayerId = id;
@@ -466,6 +533,9 @@ namespace OpenBrush.Multiplayer
             m_RemotePlayers.AddPlayer(newRemotePlayer);
 
             if (!isUserRoomOwner) return;  //below this line is only room owner responsability 
+
+            // Telewheel: no canvas to push to a newcomer, and the game sets the environment itself.
+            if (SuppressCommandSharing) return;
 
             MultiplayerSceneSync.m_Instance.StartSyncronizationForUser(newRemotePlayer.PlayerId);
             if (ManualColocationManager.m_Instance != null &&
@@ -551,9 +621,48 @@ namespace OpenBrush.Multiplayer
             m_Manager.SendLargeDataToPlayer(playerId, Data, percentage);
         }
 
+        // Telewheel: plain messages to the other players in the room, for the game on top.
+        public bool SendCustomData(int playerId, byte[] data)
+        {
+            return State == ConnectionState.IN_ROOM && m_Manager != null && m_Manager.SendCustomData(playerId, data);
+        }
+
+        // Telewheel: everyone else in the room right now, whether or not their avatar has spawned.
+        public IList<int> GetRemotePlayerIds()
+        {
+            return m_Manager != null ? m_Manager.GetRemotePlayerIds() : new List<int>();
+        }
+
+        // Telewheel: shows or hides the other players' avatars (they stand in the same spot while drawing).
+        public void SetRemoteAvatarsVisible(bool visible)
+        {
+            if (m_RemotePlayers == null) return;
+            foreach (RemotePlayer player in m_RemotePlayers.List)
+            {
+                if (player.PlayerGameObject == null) continue;
+                // Not SetActive: this is a networked object, and Fusion expects it to stay active.
+                foreach (Renderer renderer in player.PlayerGameObject.GetComponentsInChildren<Renderer>(true))
+                {
+                    renderer.enabled = visible;
+                }
+            }
+        }
+
+        // Telewheel: close the room to newcomers once a match has started (or open it again).
+        public void SetRoomOpen(bool open)
+        {
+            m_Manager?.SetRoomOpen(open);
+        }
+
+        private void OnCustomDataReceived(byte[] data)
+        {
+            customDataReceived?.Invoke(data);
+        }
+
         void OnPlayerLeft(int id)
         {
-            if (m_LocalPlayer.PlayerId == id)
+            // Telewheel: m_LocalPlayer is already null once we have left or been disconnected.
+            if (m_LocalPlayer != null && m_LocalPlayer.PlayerId == id)
             {
                 m_LocalPlayer = null;
                 Debug.Log("Possible to get here!");
@@ -561,6 +670,7 @@ namespace OpenBrush.Multiplayer
             }
 
             m_RemotePlayers.RemovePlayerById(id);
+            if (m_LocalPlayer == null) return;
 
             // Reassign Ownership if needed 
             // Check if any remaining player is the room owner
@@ -592,6 +702,7 @@ namespace OpenBrush.Multiplayer
 
         public async void OnCommandPerformed(BaseCommand command)
         {
+            if (SuppressCommandSharing) return; // Telewheel
             if (State == ConnectionState.IN_ROOM)
             {
                 await m_Manager.PerformCommand(command);
@@ -671,6 +782,7 @@ namespace OpenBrush.Multiplayer
 
         public void OnCommandUndo(BaseCommand command)
         {
+            if (SuppressCommandSharing) return; // Telewheel
             if (State == ConnectionState.IN_ROOM)
             {
                 m_Manager.UndoCommand(command);
@@ -679,6 +791,7 @@ namespace OpenBrush.Multiplayer
 
         public void OnCommandRedo(BaseCommand command)
         {
+            if (SuppressCommandSharing) return; // Telewheel
             if (State == ConnectionState.IN_ROOM)
             {
                 m_Manager.RedoCommand(command);
@@ -688,7 +801,7 @@ namespace OpenBrush.Multiplayer
         private void OnConnectionHandlerDisconnected()
         {
             m_LocalPlayer = null;// Clean up local player reference
-            m_RemotePlayers.ClearList();// Clean up remote player references
+            m_RemotePlayers?.ClearList();// Clean up remote player references // Telewheel: null-safe
             LastError = null;
             State = ConnectionState.DISCONNECTED;
             StateUpdated?.Invoke(State);

@@ -20,6 +20,9 @@ namespace TiltBrush
     public class ToolButton : BaseButton
     {
         [SerializeField] private BaseTool.ToolType m_Tool;
+
+        // Telewheel: lets the game hide buttons by the tool they switch to.
+        public BaseTool.ToolType Tool { get { return m_Tool; } }
         [SerializeField] private bool m_EatGazeInputOnPress = false;
 
         override protected void Awake()

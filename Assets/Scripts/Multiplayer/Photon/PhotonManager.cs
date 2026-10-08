@@ -38,6 +38,14 @@ namespace OpenBrush.Multiplayer
         private int sequenceNumber = 0;
         public event Action Disconnected;
 
+        // Telewheel: game messages ride on reliable data too. Stroke sync always puts a percentage
+        // (0..100) in the key's last int, so these can never be mistaken for it.
+        private const int CustomDataMagic = 0x54574C31; // "TWL1"
+        private const int CustomDataTag = -7;
+        private const int MaxCustomDataBytes = 16 * 1024 * 1024;
+        private int m_CustomSequence;
+        public event Action<byte[]> CustomDataReceived;
+
         public ConnectionUserInfo UserInfo { get; set; }
         public ConnectionState State { get; private set; }
         public string LastError { get; private set; }
@@ -47,11 +55,19 @@ namespace OpenBrush.Multiplayer
             m_Manager = manager;
             m_PlayersSpawning = new List<PlayerRef>();
 
+            // Telewheel: check the secret before building anything, and say what is wrong. A missing
+            // Secrets asset or entry used to be a NullReferenceException.
+            SecretsConfig.ServiceAuthData fusionSecrets = App.Config?.PhotonFusionSecrets;
+            if (fusionSecrets == null || string.IsNullOrEmpty(fusionSecrets.ClientId))
+            {
+                throw new InvalidOperationException("The Photon Fusion app id is missing from the Secrets asset.");
+            }
+
             Init();
 
             m_PhotonAppSettings = new FusionAppSettings
             {
-                AppIdFusion = App.Config.PhotonFusionSecrets.ClientId,
+                AppIdFusion = fusionSecrets.ClientId,
                 FixedRegion = "",
             };
         }
@@ -85,6 +101,7 @@ namespace OpenBrush.Multiplayer
 
         public void Update()
         {
+            if (m_Runner == null) return; // Telewheel: the runner is gone after a disconnect
             List<PlayerRef> copy = m_PlayersSpawning.ToList();
             foreach (var player in copy)
             {
@@ -111,6 +128,10 @@ namespace OpenBrush.Multiplayer
         {
             State = ConnectionState.CONNECTING;
 
+            // Telewheel: Disconnect destroys the runner, so build a new one before reconnecting.
+            if (m_Runner == null) Init();
+            m_PhotonAppSettings.FixedRegion = m_Manager.Region ?? ""; // Telewheel
+
             await Task.Yield();
 
             var result = await m_Runner.JoinSessionLobby(
@@ -136,6 +157,7 @@ namespace OpenBrush.Multiplayer
         {
 
             if (m_Runner == null) Init();
+            m_PhotonAppSettings.FixedRegion = m_Manager.Region ?? ""; // Telewheel
 
             State = ConnectionState.JOINING_ROOM;
 
@@ -150,6 +172,9 @@ namespace OpenBrush.Multiplayer
                 SessionName = roomCreateData.roomName,
                 CustomPhotonAppSettings = m_PhotonAppSettings,
                 PlayerCount = roomCreateData.maxPlayers != 0 ? roomCreateData.maxPlayers : null,
+                // Telewheel: a private room is left out of the room list but can still be joined by name.
+                // (This was never passed on, so "private" rooms used to be listed like any other.)
+                IsVisible = !roomCreateData.@private,
                 SceneManager = m_Runner.gameObject.GetComponent<NetworkSceneManagerDefault>(),
                 Scene = sceneInfo, // Pass the configured NetworkSceneInfo
             };
@@ -207,17 +232,20 @@ namespace OpenBrush.Multiplayer
                 }
                 m_PlayersSpawning.Clear();
 
-                await m_Runner.Shutdown(forceShutdownProcedure: false);
-                GameObject.Destroy(m_Runner.gameObject);
+                NetworkRunner runner = m_Runner;
+                await runner.Shutdown(forceShutdownProcedure: false);
+                GameObject.Destroy(runner.gameObject);
+                // Telewheel: the destroyed runner is useless; Connect and JoinRoom make a new one.
+                m_Runner = null;
 
-                if (m_Runner.IsShutdown)
+                if (runner.IsShutdown)
                 {
                     State = ConnectionState.DISCONNECTED;
                     ControllerConsoleScript.m_Instance.AddNewLine("[PhotonManager] Disconnected successfully");
                     UserInfo = new ConnectionUserInfo
                     {
                         Nickname = UserInfo.Nickname,
-                        UserId = m_Runner.UserId,
+                        UserId = runner.UserId,
                         Role = UserInfo.Role,
                     };
                 }
@@ -228,7 +256,7 @@ namespace OpenBrush.Multiplayer
                     ControllerConsoleScript.m_Instance.AddNewLine(LastError);
                 }
 
-                return m_Runner.IsShutdown;
+                return runner.IsShutdown;
             }
             return true;
         }
@@ -244,7 +272,8 @@ namespace OpenBrush.Multiplayer
                 if (!success) return false;
                 return true;
             }
-            return false;
+            // Telewheel: already disconnected (for instance the connection dropped); just reconnect.
+            return await Connect();
 
         }
 
@@ -436,6 +465,59 @@ namespace OpenBrush.Multiplayer
             PhotonRPCBatcher.EnqueueRPC(() =>
             { PhotonRPC.RPC_DisconnectRemoteUser(m_Runner, targetPlayer); });
             return Task.FromResult(true);
+        }
+
+        // Telewheel: a plain message to one player, outside the sketch sync. Reliable and ordered per connection.
+        public bool SendCustomData(int playerId, byte[] data)
+        {
+            if (m_Runner == null || data == null || m_Runner.IsShutdown) return false;
+            try
+            {
+                m_CustomSequence++;
+                var key = ReliableKey.FromInts(CustomDataMagic, m_CustomSequence, 0, CustomDataTag);
+                m_Runner.SendReliableDataToPlayer(PlayerRef.FromEncoded(playerId), key, data);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[PhotonManager] Could not send custom data to {playerId}: {ex.Message}");
+                return false;
+            }
+        }
+
+        // Telewheel: this device's own id, or -1 before the room has given it one or after it is gone.
+        public int GetLocalPlayerId()
+        {
+            if (m_Runner == null || m_Runner.IsShutdown) return -1;
+            PlayerRef local = m_Runner.LocalPlayer;
+            return local == PlayerRef.None ? -1 : local.RawEncoded;
+        }
+
+        // Telewheel: everyone else in the room, whether or not their avatar has spawned yet.
+        public IList<int> GetRemotePlayerIds()
+        {
+            var ids = new List<int>();
+            if (m_Runner == null) return ids;
+            foreach (PlayerRef player in m_Runner.ActivePlayers)
+            {
+                if (player != m_Runner.LocalPlayer) ids.Add(player.RawEncoded);
+            }
+            return ids;
+        }
+
+        // Telewheel: stops strangers joining once a match is under way. Only the room's master client
+        // can change it; for anyone else Fusion ignores it, which is fine (the game refuses late joiners too).
+        public void SetRoomOpen(bool open)
+        {
+            if (m_Runner == null) return;
+            try
+            {
+                m_Runner.SessionInfo.IsOpen = open;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[PhotonManager] Could not change whether the room is open: {ex.Message}");
+            }
         }
 
         public void SendLargeDataToPlayer(int playerId, byte[] largeData, int percentage)
@@ -635,6 +717,7 @@ namespace OpenBrush.Multiplayer
 
         public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
         {
+            m_PlayersSpawning.Remove(player); // Telewheel: a player who left before spawning is not coming
             m_Manager.playerLeft?.Invoke(player.RawEncoded);
         }
 
@@ -646,7 +729,7 @@ namespace OpenBrush.Multiplayer
                 RoomData data = new RoomData()
                 {
                     roomName = session.Name,
-                    @private = session.IsOpen,
+                    @private = !session.IsVisible, // Telewheel: was IsOpen, which is the opposite
                     numPlayers = session.PlayerCount,
                     maxPlayers = session.MaxPlayers
                 };
@@ -661,9 +744,26 @@ namespace OpenBrush.Multiplayer
         {
             //Debug.Log("Server received complete reliable data");
 
+            int keyMagic;
             int percentage;
-            key.GetInts(out _, out _, out _, out percentage);
+            key.GetInts(out keyMagic, out _, out _, out percentage);
             //Debug.Log($"Data received with percentage: {percentage}%");
+
+            // Telewheel: game messages are told apart by their key and never reach the sketch code. Copy
+            // the bytes: the span is only valid for the duration of this call. Who sent them is NOT passed
+            // on: in Shared mode `player` here is this device itself, so the game puts the sender inside
+            // the message and checks it there.
+            if (percentage == CustomDataTag && keyMagic == CustomDataMagic)
+            {
+                if (!data.IsEmpty && data.Length <= MaxCustomDataBytes)
+                {
+                    CustomDataReceived?.Invoke(data.ToArray());
+                }
+                return;
+            }
+
+            // Telewheel: while a game match is using the room, nobody may push strokes into the sketch.
+            if (m_Manager.SuppressCommandSharing) return;
 
             if (data.IsEmpty)
             {
@@ -687,6 +787,8 @@ namespace OpenBrush.Multiplayer
         #region Unused Photon Callbacks 
         public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
         {
+            // Telewheel: only for the runner in use; a late call from one already replaced is not news.
+            if (runner != m_Runner) return;
             Disconnected?.Invoke();
         }
         public void OnDisconnectedFromServer(NetworkRunner runner) { }
@@ -702,7 +804,14 @@ namespace OpenBrush.Multiplayer
         public void OnSceneLoadStart(NetworkRunner runner) { }
         public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
         public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
-        public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
+        public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
+        {
+            // Telewheel: losing the connection to Photon (network gone, headset asleep) used to leave the
+            // manager believing it was still in the room. Treat it like a shutdown.
+            if (runner != m_Runner) return;
+            Debug.LogWarning($"[PhotonManager] Disconnected from the server: {reason}");
+            Disconnected?.Invoke();
+        }
 
 
         #endregion

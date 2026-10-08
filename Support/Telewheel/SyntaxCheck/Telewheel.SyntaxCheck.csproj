@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Parses C# files with chosen #define symbols and reports syntax errors only. Open Brush's Photon code is
+       only compiled in Unity and only with the Photon SDK, so CI cannot build it; this at least proves the
+       edits to it parse, with and without MP_PHOTON.
+       Run it with dotnet run on this project, passing the symbols and then the files (see the CI workflow). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
+  </ItemGroup>
+
+</Project>

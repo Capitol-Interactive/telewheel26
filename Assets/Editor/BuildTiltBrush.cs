@@ -1111,8 +1111,9 @@ static class BuildTiltBrush
             }
 
 #if USE_QUEST_PACKAGE_NAME
-            //Can't change Quest identifier
-            new_identifier = "com.Icosa.OpenBrush";
+            // Telewheel: the Quest build is Telewheel, with its own id so it installs next to Open Brush.
+            new_identifier = "com.capitolinteractive.telewheel";
+            new_name = "Telewheel";
 #elif ZAPBOX_SUPPORTED
             // Zapbox has a separate listing
             new_identifier = "foundation.icosa.openbrushzapbox";
@@ -1196,8 +1197,25 @@ static class BuildTiltBrush
 #if USE_QUEST_PACKAGE_NAME
             // Meta store builds use OpenXR too, but must enable Meta's build hooks explicitly.
             EnableRequiredFeature<UnityEngine.XR.OpenXR.Features.MetaQuestSupport.MetaQuestFeature>(settings);
+            EnableTelewheelQuestFeatures(settings); // Telewheel
 #endif
         }
+
+#if USE_QUEST_PACKAGE_NAME
+        // Telewheel: mixed reality, hand tracking and 90 Hz on Quest. Concrete types, not feature ids (see
+        // the note in EnableAndroidXrFeatures).
+        void EnableTelewheelQuestFeatures(UnityEngine.XR.OpenXR.OpenXRSettings settings)
+        {
+            EnableRequiredFeature<UnityEngine.XR.Hands.OpenXR.HandTracking>(settings);
+            EnableRequiredFeature<UnityEngine.XR.Hands.OpenXR.MetaHandTrackingAim>(settings);
+            EnableRequiredFeature<
+                UnityEngine.XR.OpenXR.Features.CompositionLayers.OpenXRCompositionLayersFeature>(
+                settings);
+            EnableRequiredFeature<OpenXR.Extensions.FBPassthrough>(settings);
+            EnableRequiredFeature<OpenXR.Extensions.METABoundaryVisibility>(settings);
+            EnableRequiredFeature<OpenXR.Extensions.FBDisplayRefreshRate>(settings);
+        }
+#endif
 
         void EnableAndroidXrFeatures(UnityEngine.XR.OpenXR.OpenXRSettings settings)
         {
