@@ -1,27 +1,234 @@
-# PLACEHOLDER for the Raunchy (18+) word list. Replace this file with the real list.
-# Same format as words_family.txt. The wheel needs at least 8 words (more is better).
-# These mild stand-ins only exist so the 18+ filter has something to spin.
-plunger
-thong
-banana peel
-whoopee
-jiggle
-cleavage
-cucumber
-love handles
-hot tub
-bikini
-handcuffs
-nightcap
-mooning
-peach
-wiener
-bachelor
-bubble bath
-wet t-shirt
-tramp stamp
+# Telewheel RAUNCHY 18+ words: a SAMPLE list, written to the "after dark party game" level.
+# Bawdy, boozy and cheeky; nothing graphic. Every entry is something you can draw in 3D in 60 seconds
+# and that gets funnier the further it drifts. Same format as words_family.txt: one word or short
+# phrase per line, blank lines and lines starting with # are ignored, repeats are dropped, and lines
+# longer than 20 characters are skipped. The sections below are only for editing; the game shuffles
+# the whole file. Prune or add per section to turn the heat up or down.
+
+# Dates and hookups
+walk of shame
+booty call
+one night stand
+blind date
+swipe right
+dating app
+third wheel
+wingman
+pickup line
+love triangle
+rebound
+sugar daddy
+sugar baby
+cougar
+gold digger
+trophy wife
+cabana boy
+pool boy
+pizza delivery
+ghosted
+sexting
+love bite
+hickey
+make out
+french kiss
+spin the bottle
+truth or dare
+netflix and chill
+pillow talk
+cuddle puddle
+bedroom eyes
+wandering hands
+morning after
+cold shower
+mile high club
+back seat
+motel room
+do not disturb
+thin walls
+squeaky bed
+water bed
+satin sheets
+rose petals
+candlelight
+mood lighting
+disco ball
+slow dance
+dirty dancing
+lap dance
 pole dance
-skinny dip
+twerking
+grinding
+
+# Dress code (or lack of one)
+thong
+g-string
+lingerie
+garter belt
+fishnets
+stilettos
+corset
+latex
+pasties
+push up bra
+cleavage
+side boob
+underboob
+booty shorts
+wardrobe malfunction
+birthday suit
+in the buff
+the full monty
+skinny dipping
+nude beach
+nudist colony
+clothing optional
+streaking
+mooning
+flashing
+peeping tom
+keyhole
+sock on the door
+tramp stamp
+tan lines
+farmer's tan
+spray tan
+boob job
+hair plugs
+toupee
+comb over
+porn stache
+man bun
+chest hair
+back hair
+
+# Toys, props and bedroom furniture
+handcuffs
+fuzzy handcuffs
+blindfold
+feather duster
+riding crop
+whip
+paddle
+spanking
+whipped cream
+chocolate syrup
+edible undies
+massage oil
+happy ending
+body paint
+body shots
+bubble bath
+hot tub
+headboard
+bunk bed
+scented candle
+cologne
+cheap perfume
+
+# Costumes and fantasies
+naughty nurse
+sexy cop
+french maid
+hot firefighter
+plumber
+role play
+cosplay
+masquerade
+burlesque
+stripper
+strip poker
+strip club
+making it rain
+champagne room
+velvet rope
+bouncer
+bachelor party
+bachelorette
+spring break
+mardi gras beads
+
+# Fruit and veg with a reputation
+eggplant
+peach
+cucumber
 hot dog
-kiss
-twerk
+corn dog
+sausage
+popsicle
+melons
+coconuts
+tongue ring
+belly ring
+tattoo
+
+# Booze, bars and bad decisions
+keg stand
+beer pong
+flip cup
+shots
+tequila
+jungle juice
+red solo cup
+margarita
+bottomless mimosa
+drunk dial
+drunk text
+beer goggles
+beer belly
+dad bod
+love handles
+hangover
+blackout
+last call
+bar tab
+pub crawl
+designated driver
+fake id
+karaoke
+liquor store
+chug
+beer bong
+bong
+edibles
+joint
+munchies
+stoner
+
+# Body humor
+fart
+whoopee cushion
+butt crack
+plumber's crack
+toilet paper
+cellulite
+stretch marks
+jiggle
+booty
+wedgie
+skid mark
+toilet seat up
+
+# Awkward, adult and cheeky
+walked in on
+caught in the act
+burner phone
+affair
+hotel room
+divorce
+prenup
+midlife crisis
+sports car
+man cave
+naked mole rat
+naked chef
+adults only
+rated r
+parental advisory
+censor bar
+bleep
+dirty mind
+dirty talk
+guilty pleasure
+naughty list
+hidden stash
+hot mic
