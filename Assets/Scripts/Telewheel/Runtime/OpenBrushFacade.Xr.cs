@@ -88,9 +88,6 @@ namespace Telewheel
 
         // ----- Hands -----
 
-        // Pressing needs a firm pinch, letting go a clearly open one, so a wobbling pinch does not flicker.
-        private const float PinchPress = 0.8f;
-        private const float PinchRelease = 0.5f;
         private const float HandSearchSeconds = 1f;
 
         // The XR Hands package's Meta aim-hand device is a TrackedDevice: devicePosition and deviceRotation
@@ -111,8 +108,7 @@ namespace Telewheel
             public UnityEngine.InputSystem.InputControl<float> Tracked;
             public UnityEngine.InputSystem.InputControl<float> Pinch;
             public bool IsTracked;
-            public bool Pinching;
-            public bool PressedThisFrame;
+            public readonly PinchTracker Tracker = new PinchTracker();
             public bool Failed;
             public string Found = "no device";
         }
@@ -178,7 +174,7 @@ namespace Telewheel
                 }
                 foreach (Hand hand in s_Hands)
                 {
-                    if (hand.PressedThisFrame)
+                    if (hand.Tracker.PressedThisFrame)
                     {
                         return true;
                     }
@@ -199,7 +195,7 @@ namespace Telewheel
                 }
                 foreach (Hand hand in s_Hands)
                 {
-                    if (hand.Pinching)
+                    if (hand.Tracker.Pinching)
                     {
                         return true;
                     }
@@ -278,7 +274,7 @@ namespace Telewheel
                 {
                     continue;
                 }
-                if (hand.Pinching)
+                if (hand.Tracker.Pinching)
                 {
                     return hand;
                 }
@@ -343,7 +339,6 @@ namespace Telewheel
             }
             foreach (Hand hand in s_Hands)
             {
-                hand.PressedThisFrame = false;
                 if (hand.Failed)
                 {
                     continue;
@@ -380,8 +375,7 @@ namespace Telewheel
             hand.Tracked = null;
             hand.Pinch = null;
             hand.IsTracked = false;
-            hand.Pinching = false;
-            hand.PressedThisFrame = false;
+            hand.Tracker.Reset();
             hand.Found = "no device";
         }
 
@@ -465,37 +459,15 @@ namespace Telewheel
 
         private static void ReadHand(Hand hand)
         {
-            bool wasTracked = hand.IsTracked;
-            bool wasPinching = hand.Pinching;
-            hand.PressedThisFrame = false;
             if (hand.Device == null || !hand.Device.added)
             {
                 hand.IsTracked = false;
-                hand.Pinching = false;
+                hand.Tracker.Update(false, 0f);
                 return;
             }
             hand.IsTracked = hand.Tracked != null ? hand.Tracked.ReadValue() > 0.5f : hand.Position != null;
-            if (!hand.IsTracked || hand.Pinch == null)
-            {
-                hand.Pinching = false;
-                return;
-            }
-            float pinch = hand.Pinch.ReadValue();
-            if (!wasTracked)
-            {
-                // A hand that comes back already pinching has not just pressed anything.
-                hand.Pinching = pinch >= PinchPress;
-                return;
-            }
-            if (!wasPinching && pinch >= PinchPress)
-            {
-                hand.Pinching = true;
-                hand.PressedThisFrame = true;
-            }
-            else if (wasPinching && pinch <= PinchRelease)
-            {
-                hand.Pinching = false;
-            }
+            bool canPinch = hand.IsTracked && hand.Pinch != null;
+            hand.Tracker.Update(canPinch, canPinch ? hand.Pinch.ReadValue() : 0f);
         }
     }
 }
