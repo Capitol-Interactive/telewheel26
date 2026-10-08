@@ -37,11 +37,13 @@ namespace Telewheel
         public int callbackOrder => 10;
 
         // The first is the one the UI is drawn with. If it cannot be found, TwGfx falls back to the others.
+        // Not Hidden/Internal-Colored, the last fallback in TwGfx: it is an editor-only resource ("unity default
+        // resources"), and putting it here makes every player build fail with "an asset is marked
+        // with HideFlags.DontSave but is included in the build".
         private static readonly string[] AlwaysIncluded =
         {
             "Unlit/Color",
             "Sprites/Default",
-            "Hidden/Internal-Colored",
             "TextMeshPro/Distance Field",
             "TextMeshPro/Mobile/Distance Field",
         };
