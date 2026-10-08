@@ -41,6 +41,12 @@ internal static class AndroidStoreManifest
             }
         }
 
+        // Telewheel
+        if (telewheel)
+        {
+            TelewheelAndroidManifest.Apply(doc);
+        }
+
         if (!metaStore)
         {
             return;
@@ -65,12 +71,6 @@ internal static class AndroidStoreManifest
         var headTracking = GetOrCreate(doc, root, "uses-feature", "android.hardware.vr.headtracking");
         SetAndroid(headTracking, "required", "true");
         SetAndroid(headTracking, "version", "1");
-
-        // Telewheel
-        if (telewheel)
-        {
-            TelewheelAndroidManifest.Apply(doc);
-        }
     }
 
     private static void SetMetadata(XmlDocument doc, XmlElement parent, string name, string value)

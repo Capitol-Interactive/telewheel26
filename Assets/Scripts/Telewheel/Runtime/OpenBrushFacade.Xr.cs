@@ -113,6 +113,7 @@ namespace Telewheel
             public bool IsTracked;
             public bool Pinching;
             public bool PressedThisFrame;
+            public bool Failed;
             public string Found = "no device";
         }
 
@@ -121,8 +122,10 @@ namespace Telewheel
             new Hand { Side = "RightHand" },
             new Hand { Side = "LeftHand" },
         };
+        private static readonly List<UnityEngine.XR.InputDevice> s_ControllerBuffer = new List<UnityEngine.XR.InputDevice>();
         private static int s_HandFrame = -1;
         private static float s_NextHandSearch;
+        private static bool s_HandIsPointer;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetXrStatics()
@@ -130,17 +133,12 @@ namespace Telewheel
             RefreshRateStatus = "not requested";
             s_HandFrame = -1;
             s_NextHandSearch = 0f;
+            s_HandIsPointer = false;
+            s_ControllerBuffer.Clear();
             foreach (Hand hand in s_Hands)
             {
-                hand.Device = null;
-                hand.Position = null;
-                hand.Rotation = null;
-                hand.Tracked = null;
-                hand.Pinch = null;
-                hand.IsTracked = false;
-                hand.Pinching = false;
-                hand.PressedThisFrame = false;
-                hand.Found = "no device";
+                ForgetHand(hand);
+                hand.Failed = false;
             }
         }
 
@@ -150,23 +148,34 @@ namespace Telewheel
             get
             {
                 PollHands();
-                foreach (Hand hand in s_Hands)
-                {
-                    if (hand.IsTracked && hand.Position != null && hand.Rotation != null)
-                    {
-                        return true;
-                    }
-                }
-                return false;
+                return AnyHandUsable();
             }
         }
 
-        /// <summary>A hand's index finger and thumb just came together (once per pinch).</summary>
+        /// <summary>
+        /// True when the player is pointing with a hand: a hand is tracked and no controller is. A
+        /// controller that is merely connected (put down, while the headset watches the hands) does not
+        /// count as being used. In desktop mode this is always false.
+        /// </summary>
+        public static bool HandPointerActive
+        {
+            get
+            {
+                PollHands();
+                return s_HandIsPointer;
+            }
+        }
+
+        /// <summary>The pointing hand's index finger and thumb just came together (once per pinch).</summary>
         public static bool HandPinchPressedThisFrame
         {
             get
             {
                 PollHands();
+                if (!s_HandIsPointer)
+                {
+                    return false;
+                }
                 foreach (Hand hand in s_Hands)
                 {
                     if (hand.PressedThisFrame)
@@ -178,12 +187,16 @@ namespace Telewheel
             }
         }
 
-        /// <summary>A hand is pinching now.</summary>
+        /// <summary>The pointing hand is pinching now.</summary>
         public static bool HandPinchHeld
         {
             get
             {
                 PollHands();
+                if (!s_HandIsPointer)
+                {
+                    return false;
+                }
                 foreach (Hand hand in s_Hands)
                 {
                     if (hand.Pinching)
@@ -206,7 +219,7 @@ namespace Telewheel
                 {
                     lines.Add(hand.Side + ": " + hand.Found + (hand.Device != null ? (hand.IsTracked ? ", tracked" : ", not tracked") : string.Empty));
                 }
-                return string.Join("; ", lines.ToArray());
+                return string.Join("; ", lines.ToArray()) + (s_HandIsPointer ? "; pointing with a hand" : string.Empty);
             }
         }
 
@@ -219,17 +232,41 @@ namespace Telewheel
             ray = default(Ray);
             PollHands();
             Hand hand = ActiveHand();
-            Quaternion rotation;
-            float scale;
-            Vector3 translation;
-            if (hand == null || !TryGetTrackingToWorld(out rotation, out scale, out translation))
+            if (hand == null)
             {
                 return false;
             }
-            Vector3 origin = rotation * (hand.Position.ReadValue() * scale) + translation;
-            Vector3 direction = rotation * (hand.Rotation.ReadValue() * Vector3.forward);
-            ray = new Ray(origin, direction);
-            return true;
+            try
+            {
+                Quaternion rotation;
+                float scale;
+                Vector3 translation;
+                if (!TryGetTrackingToWorld(out rotation, out scale, out translation))
+                {
+                    return false;
+                }
+                Vector3 origin = rotation * (hand.Position.ReadValue() * scale) + translation;
+                Vector3 direction = rotation * (hand.Rotation.ReadValue() * Vector3.forward);
+                ray = new Ray(origin, direction);
+                return true;
+            }
+            catch (Exception e)
+            {
+                DisableHand(hand, e);
+                return false;
+            }
+        }
+
+        private static bool AnyHandUsable()
+        {
+            foreach (Hand hand in s_Hands)
+            {
+                if (hand.IsTracked && hand.Position != null && hand.Rotation != null)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static Hand ActiveHand()
@@ -253,9 +290,9 @@ namespace Telewheel
             return chosen;
         }
 
-        // Hand poses arrive in the headset's own tracking space; the scene works in decimetres under the
-        // camera rig. The camera's pose in both spaces gives the mapping, so nothing here depends on how
-        // the rig is built.
+        // Hand poses arrive in the headset's tracking space. The camera sits under the XR origin, and that
+        // origin is exactly the tracking space (the scene works in decimetres, so it is scaled), so its
+        // transform is the mapping. If the camera has no parent, the camera's pose in both spaces gives it.
         private static bool TryGetTrackingToWorld(out Quaternion rotation, out float scale, out Vector3 translation)
         {
             rotation = Quaternion.identity;
@@ -266,6 +303,15 @@ namespace Telewheel
             {
                 return false;
             }
+            Transform eye = camera.transform;
+            Transform space = eye.parent;
+            if (space != null)
+            {
+                rotation = space.rotation;
+                scale = Mathf.Max(0.0001f, space.lossyScale.x);
+                translation = space.position;
+                return true;
+            }
             UnityEngine.XR.InputDevice head = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.CenterEye);
             Vector3 headPosition;
             Quaternion headRotation;
@@ -275,14 +321,14 @@ namespace Telewheel
             {
                 return false;
             }
-            Transform eye = camera.transform;
             scale = Mathf.Max(0.0001f, eye.lossyScale.x);
             rotation = eye.rotation * Quaternion.Inverse(headRotation);
             translation = eye.position - rotation * (headPosition * scale);
             return true;
         }
 
-        // Reads both hands once per frame, however many times the properties above are asked.
+        // Reads both hands once per frame, however many times the properties above are asked. A failure in
+        // one hand turns that hand off (and says why) rather than throwing into the game every frame.
         private static void PollHands()
         {
             if (s_HandFrame == Time.frameCount)
@@ -290,34 +336,81 @@ namespace Telewheel
                 return;
             }
             s_HandFrame = Time.frameCount;
-            if (Time.unscaledTime >= s_NextHandSearch)
+            bool search = Time.unscaledTime >= s_NextHandSearch;
+            if (search)
             {
                 s_NextHandSearch = Time.unscaledTime + HandSearchSeconds;
-                foreach (Hand hand in s_Hands)
-                {
-                    if (hand.Device == null || !hand.Device.added)
-                    {
-                        FindHandDevice(hand);
-                    }
-                }
             }
             foreach (Hand hand in s_Hands)
             {
-                ReadHand(hand);
+                hand.PressedThisFrame = false;
+                if (hand.Failed)
+                {
+                    continue;
+                }
+                try
+                {
+                    if (search && (hand.Device == null || !hand.Device.added))
+                    {
+                        FindHandDevice(hand);
+                    }
+                    ReadHand(hand);
+                }
+                catch (Exception e)
+                {
+                    DisableHand(hand, e);
+                }
             }
+            s_HandIsPointer = !IsMonoscopic && AnyHandUsable() && !AnyControllerTracked();
         }
 
-        private static void FindHandDevice(Hand hand)
+        private static void DisableHand(Hand hand, Exception e)
+        {
+            Debug.LogWarning("[Telewheel] Hand tracking for the " + hand.Side + " is off: " + e.GetType().Name + ": " + e.Message);
+            ForgetHand(hand);
+            hand.Failed = true;
+            hand.Found = "off after an error: " + e.Message;
+        }
+
+        private static void ForgetHand(Hand hand)
         {
             hand.Device = null;
             hand.Position = null;
             hand.Rotation = null;
             hand.Tracked = null;
             hand.Pinch = null;
+            hand.IsTracked = false;
+            hand.Pinching = false;
+            hand.PressedThisFrame = false;
+            hand.Found = "no device";
+        }
+
+        // A controller counts as in use only while the headset tracks it. (Open Brush's own
+        // IsTrackedObjectValid says whether the controller is connected, which stays true when it is put
+        // down.) Reused list: this runs every frame.
+        private static bool AnyControllerTracked()
+        {
+            s_ControllerBuffer.Clear();
+            UnityEngine.XR.InputDevices.GetDevicesWithCharacteristics(
+                UnityEngine.XR.InputDeviceCharacteristics.Controller, s_ControllerBuffer);
+            foreach (UnityEngine.XR.InputDevice device in s_ControllerBuffer)
+            {
+                bool tracked;
+                if (device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.isTracked, out tracked) && tracked)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static void FindHandDevice(Hand hand)
+        {
+            ForgetHand(hand);
             hand.Found = "no " + HandLayout + " device";
             foreach (UnityEngine.InputSystem.InputDevice device in UnityEngine.InputSystem.InputSystem.devices)
             {
-                if (device.layout != HandLayout || !HasUsage(device, hand.Side))
+                if (!IsAimHand(device) || !IsSide(device, hand.Side))
                 {
                     continue;
                 }
@@ -334,27 +427,37 @@ namespace Telewheel
             }
         }
 
-        private static bool HasUsage(UnityEngine.InputSystem.InputDevice device, string usage)
+        // By layout name, or by the class name in case the layout is registered under another.
+        private static bool IsAimHand(UnityEngine.InputSystem.InputDevice device)
+        {
+            return device.layout == HandLayout || device.GetType().Name == HandLayout;
+        }
+
+        // The usage "LeftHand" / "RightHand" says which hand; failing that, the device's own name might.
+        private static bool IsSide(UnityEngine.InputSystem.InputDevice device, string side)
         {
             foreach (var candidate in device.usages)
             {
-                if (candidate.ToString() == usage)
+                if (candidate.ToString() == side)
                 {
                     return true;
                 }
             }
-            return false;
+            string word = side.Substring(0, side.Length - "Hand".Length); // "Left" or "Right"
+            return device.name.IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        // TryGetChildControl without a type argument returns null for a missing control; the generic one
+        // throws if the control exists with another type, so the type is checked here instead.
         private static UnityEngine.InputSystem.InputControl<T> FindControl<T>(
             UnityEngine.InputSystem.InputDevice device, string[] paths) where T : struct
         {
             foreach (string path in paths)
             {
-                var control = device.TryGetChildControl<UnityEngine.InputSystem.InputControl<T>>(path);
-                if (control != null)
+                var typed = device.TryGetChildControl(path) as UnityEngine.InputSystem.InputControl<T>;
+                if (typed != null)
                 {
-                    return control;
+                    return typed;
                 }
             }
             return null;
@@ -362,6 +465,7 @@ namespace Telewheel
 
         private static void ReadHand(Hand hand)
         {
+            bool wasTracked = hand.IsTracked;
             bool wasPinching = hand.Pinching;
             hand.PressedThisFrame = false;
             if (hand.Device == null || !hand.Device.added)
@@ -377,6 +481,12 @@ namespace Telewheel
                 return;
             }
             float pinch = hand.Pinch.ReadValue();
+            if (!wasTracked)
+            {
+                // A hand that comes back already pinching has not just pressed anything.
+                hand.Pinching = pinch >= PinchPress;
+                return;
+            }
             if (!wasPinching && pinch >= PinchPress)
             {
                 hand.Pinching = true;

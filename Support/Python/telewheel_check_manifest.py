@@ -27,6 +27,7 @@ tree out, only on the strings being present in the manifest.
 """
 
 import argparse
+import re
 import sys
 
 # Name of the check -> text that must appear in the manifest.
@@ -44,7 +45,15 @@ REQUIRED = {
 # Name of the check -> text that must not appear.
 FORBIDDEN = {
     "All files access": "android.permission.MANAGE_EXTERNAL_STORAGE",
+    "Write to shared storage": "android.permission.WRITE_EXTERNAL_STORAGE",
     "Legacy external storage": "requestLegacyExternalStorage",
+}
+
+# Entries that must be optional, so the app still installs without them. aapt2 prints a false boolean as
+# "(type 0x12)0x0". Only reported: the dump's layout is not something to fail a build over.
+OPTIONAL_FEATURES = {
+    "Passthrough is optional": "com.oculus.feature.PASSTHROUGH",
+    "Hand tracking is optional": "oculus.software.handtracking",
 }
 
 # Shown for information, not checked: which activity launches the app.
@@ -63,6 +72,32 @@ def check(text):
     return rows, all(passed for _, passed, _ in rows)
 
 
+def optional_rows(text):
+    """Information rows: is each feature's `required` attribute false? Never a failure."""
+    rows = []
+    blocks = re.split(r"(?m)^\s*(?=E: )", text)
+    for label, name in OPTIONAL_FEATURES.items():
+        state = "not confirmed (could not read the attribute)"
+        for block in blocks:
+            if (
+                name not in block
+                or "uses-feature" not in block.split("\n", maxsplit=1)[0]
+            ):
+                continue
+            match = re.search(
+                r"required\(0x[0-9a-fA-F]+\)=\(type 0x12\)(0x[0-9a-fA-F]+)", block
+            )
+            if match:
+                state = (
+                    "required=false"
+                    if int(match.group(1), 16) == 0
+                    else "required=TRUE"
+                )
+            break
+        rows.append((label, "info", state))
+    return rows
+
+
 def activities(text):
     """The launcher activity classes mentioned in the dump, in order of first appearance."""
     return [name for name in ACTIVITIES if name in text]
@@ -76,9 +111,9 @@ def report(rows, ok, found_activities):
         "| --- | --- | --- |",
     ]
     for label, passed, detail in rows:
-        lines.append(
-            "| %s | %s | `%s` |" % (label, "pass" if passed else "FAIL", detail)
-        )
+        # A check is True or False; an information row carries its own word.
+        result = passed if isinstance(passed, str) else ("pass" if passed else "FAIL")
+        lines.append("| %s | %s | `%s` |" % (label, result, detail))
     lines.append("")
     lines.append("Activities mentioned: " + (", ".join(found_activities) or "none"))
     return "\n".join(lines)
@@ -90,13 +125,17 @@ def main(argv=None):
         "dump", help="text from: aapt2 dump xmltree --file AndroidManifest.xml APK"
     )
     args = parser.parse_args(argv)
-    with open(args.dump, encoding="utf-8", errors="replace") as handle:
-        text = handle.read()
+    try:
+        with open(args.dump, encoding="utf-8", errors="replace") as handle:
+            text = handle.read()
+    except OSError as error:
+        print("Could not read the manifest dump: %s" % error, file=sys.stderr)
+        return 1
     if not text.strip():
         print("The manifest dump is empty.", file=sys.stderr)
         return 1
     rows, ok = check(text)
-    print(report(rows, ok, activities(text)))
+    print(report(rows + optional_rows(text), ok, activities(text)))
     return 0 if ok else 1
 
 

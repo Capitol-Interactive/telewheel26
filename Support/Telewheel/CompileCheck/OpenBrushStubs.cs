@@ -68,6 +68,8 @@ namespace UnityEngine.InputSystem
         public string layout { get { return string.Empty; } }
         public string path { get { return string.Empty; } }
         public InternedString[] usages { get { return null; } }
+        public string name { get { return string.Empty; } }
+        public InputControl TryGetChildControl(string path) { return null; }
         public TControl TryGetChildControl<TControl>(string path) where TControl : InputControl { return null; }
     }
     public abstract class InputControl<TValue> : InputControl where TValue : struct

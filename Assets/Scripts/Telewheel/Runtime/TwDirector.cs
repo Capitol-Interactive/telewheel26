@@ -128,15 +128,27 @@ namespace Telewheel
             }
         }
 
+        // What the headset is asked to run at. Quest apps start at a lower rate unless they ask.
+        private const float RefreshRateTarget = 90f;
+
+        // The runtime can drop the request when the app is paused and resumed (taking the headset off).
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (hasFocus && m_Started && Application.platform == RuntimePlatform.Android && TelewheelBuild.IsQuestBuild)
+            {
+                OpenBrushFacade.RequestRefreshRate(RefreshRateTarget);
+            }
+        }
+
         private void StartGame()
         {
             m_Started = true;
             Log("Open Brush is ready; entering Telewheel mode.");
             OpenBrushFacade.EnterGameMode();
             OpenBrushFacade.SetDrawingAllowed(false);
-            if (Application.platform == RuntimePlatform.Android)
+            if (Application.platform == RuntimePlatform.Android && TelewheelBuild.IsQuestBuild)
             {
-                Log("Refresh rate: " + OpenBrushFacade.RequestRefreshRate(90f));
+                Log("Refresh rate: " + OpenBrushFacade.RequestRefreshRate(RefreshRateTarget));
             }
             var hidden = new List<string>();
             TwModeAdapter.HideUnusedButtons(hidden);

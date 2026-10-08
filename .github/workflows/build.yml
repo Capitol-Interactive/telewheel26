@@ -302,7 +302,7 @@ jobs:
             extra_defines: OPEN_BRUSH_VIEWER
             extra_photon_defines: MP_PHOTON CROSS_PLATFORM_INPUT MOBILE_INPUT PHOTON_VOICE_DEFINED FUSION_WEAVER FUSION2 FUSION_2_1_OR_NEWER
 
-          # The Meta store requires its original application ID, irrespective of the XR loader.
+          # The Telewheel Quest build (USE_QUEST_PACKAGE_NAME) has its own id, com.capitolinteractive.telewheel; Open Brush's release and store jobs further down only run in the upstream repository.
           - name: Android Meta Quest
             targetPlatform: Android
             androidTargetSdkVersion: AndroidApiLevel34  # Meta upload validation rejects SDK 35; keep this separate from Google Play.
@@ -420,7 +420,13 @@ jobs:
       # Telewheel: the mirror is public, so a build with no PHOTON_PAT can still have online play.
       - name: Fetch the public Photon SDK mirror (Telewheel rows without PHOTON_PAT)
         if: ${{ !env.PHOTON_PAT && matrix.telewheel_photon }}
-        run: python3 Support/bin/setup-photon.py fetch
+        run: |
+          for attempt in 1 2 3; do
+            python3 Support/bin/setup-photon.py fetch --force && exit 0
+            echo "Attempt $attempt failed; trying again."
+            sleep 20
+          done
+          exit 1
 
       - name: Restore Library/
         id: cache_library

@@ -37,30 +37,35 @@ jobs:
         continue-on-error: true  # The Quest row may have failed, and that is reported by the Builds run itself
         with:
           pattern: Android Meta Quest*
-          merge-multiple: true
-          path: quest
+          path: quest  # One folder per artifact (release, development), so one cannot overwrite another
           run-id: ${{ env.RUN_ID }}
           github-token: ${{ github.token }}
 
-      - name: Read the manifest and check it
+      - name: Read each manifest and check it
+        shell: bash
         run: |
-          APK=$(find quest -name '*.apk' 2>/dev/null | head -n 1)
-          if [ -z "$APK" ]; then
-            echo "::notice::No Quest APK in run $RUN_ID, so there is nothing to inspect."
+          mapfile -d '' APKS < <(find quest -name '*.apk' -print0 2>/dev/null | sort -z)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::warning::No Quest APK in run $RUN_ID, so there is nothing to inspect."
             exit 0
           fi
           AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -n 1)
-          echo "Inspecting $APK with $AAPT2"
-          "$AAPT2" dump xmltree --file AndroidManifest.xml "$APK" > manifest-dump.txt
-          python3 -I Support/Python/telewheel_check_manifest.py manifest-dump.txt | tee -a "$GITHUB_STEP_SUMMARY"
-          status=${PIPESTATUS[0]}
-          {
-            echo
-            echo "<details><summary>The full manifest</summary>"
-            echo
-            echo '```'
-            cat manifest-dump.txt
-            echo '```'
-            echo "</details>"
-          } >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          for APK in "${APKS[@]}"; do
+            echo "Inspecting $APK with $AAPT2"
+            "$AAPT2" dump xmltree --file AndroidManifest.xml "$APK" > manifest-dump.txt
+            python3 -I Support/Python/telewheel_check_manifest.py manifest-dump.txt > report.md || status=1
+            {
+              echo "### $APK"
+              cat report.md
+              echo
+              echo "<details><summary>The full manifest</summary>"
+              echo
+              echo '```'
+              cat manifest-dump.txt
+              echo '```'
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+            cat report.md
+          done
           exit "$status"

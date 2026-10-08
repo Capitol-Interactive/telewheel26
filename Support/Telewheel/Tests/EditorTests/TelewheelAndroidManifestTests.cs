@@ -71,6 +71,12 @@ namespace Telewheel.Tests
             XmlElement permission = Find(doc, "uses-permission", TelewheelAndroidManifest.ManageExternalStorage);
             Assert.IsNotNull(permission);
             Assert.AreEqual("remove", permission.GetAttribute("node", T));
+            foreach (string name in new[] { TelewheelAndroidManifest.WriteExternalStorage, TelewheelAndroidManifest.ReadExternalStorage })
+            {
+                XmlElement other = Find(doc, "uses-permission", name);
+                Assert.IsNotNull(other, name + " should be marked so a library cannot add it");
+                Assert.AreEqual("remove", other.GetAttribute("node", T));
+            }
             var app = (XmlElement)doc.SelectSingleNode("/manifest/application");
             Assert.IsFalse(app.HasAttribute("requestLegacyExternalStorage", A));
             StringAssert.Contains("android:requestLegacyExternalStorage", app.GetAttribute("remove", T));
@@ -140,6 +146,46 @@ namespace Telewheel.Tests
             StringAssert.Contains("tools:node=\"remove\"", xml);
             StringAssert.Contains("android:required=\"false\"", xml);
             StringAssert.Contains("tools:replace=\"android:required\"", xml);
+        }
+
+        [Test]
+        public void TheEntriesDoNotDependOnTheStoreFlag()
+        {
+            XmlDocument doc = LoadProjectManifest();
+            AndroidStoreManifest.Configure(doc, false, false, true);
+            Assert.IsNotNull(Find(doc, "uses-feature", TelewheelAndroidManifest.PassthroughFeature));
+            Assert.AreEqual(
+                "remove",
+                Find(doc, "uses-permission", TelewheelAndroidManifest.ManageExternalStorage).GetAttribute("node", T));
+        }
+
+        [Test]
+        public void AnAndroidXrBuildKeepsThemToo()
+        {
+            XmlDocument doc = LoadProjectManifest();
+            AndroidStoreManifest.Configure(doc, true, true, true);
+            Assert.IsNotNull(Find(doc, "uses-feature", TelewheelAndroidManifest.PassthroughFeature));
+            Assert.IsNotNull(Find(doc, "uses-permission", TelewheelAndroidManifest.HandTrackingPermission));
+        }
+
+        [Test]
+        public void ARequiredFeatureAPackageAskedForIsMadeOptional()
+        {
+            var doc = new XmlDocument();
+            doc.LoadXml(
+                "<manifest xmlns:android=\"" + A + "\" xmlns:tools=\"" + T + "\"><application/>" +
+                "<uses-feature android:name=\"" + TelewheelAndroidManifest.PassthroughFeature +
+                "\" android:required=\"true\" tools:replace=\"android:required,android:version\"/></manifest>");
+            TelewheelAndroidManifest.Apply(doc);
+            XmlElement feature = Find(doc, "uses-feature", TelewheelAndroidManifest.PassthroughFeature);
+            Assert.AreEqual("false", feature.GetAttribute("required", A));
+            Assert.AreEqual("android:required,android:version", feature.GetAttribute("replace", T), "kept, and not doubled");
+            Assert.AreEqual(
+                1,
+                doc.SelectNodes(
+                    "/manifest/uses-feature[@android:name='" + TelewheelAndroidManifest.PassthroughFeature + "']",
+                    Namespaces(doc)).Count,
+                "no second element for the same feature");
         }
 
         [Test]

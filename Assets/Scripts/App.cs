@@ -2014,7 +2014,7 @@ namespace TiltBrush
                     break;
                 case RuntimePlatform.Android:
                     // Telewheel: the app's own folder; no storage permission, and nothing to move.
-                    if (Telewheel.TelewheelBuild.IsQuestBuild)
+                    if (global::Telewheel.TelewheelBuild.IsQuestBuild)
                     {
                         m_UserPath = Application.persistentDataPath;
                         break;

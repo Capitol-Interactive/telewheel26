@@ -25,9 +25,11 @@ namespace TiltBrush
 
         public static string GetBlocksStoreUrl()
         {
-            // CI's USE_QUEST_PACKAGE_NAME preserves the Meta store's registered identifier.
+            // CI's USE_QUEST_PACKAGE_NAME builds are the Quest builds: Open Brush's registered identifier,
+            // or (Telewheel) its own.
             bool isQuestBuild = Application.platform == RuntimePlatform.Android &&
-                Application.identifier == "com.Icosa.OpenBrush";
+                (Application.identifier == "com.Icosa.OpenBrush" ||
+                 Application.identifier == "com.capitolinteractive.telewheel"); // Telewheel
             if (isQuestBuild)
             {
                 // Quest builds use the Meta store link.

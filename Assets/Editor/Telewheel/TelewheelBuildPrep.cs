@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Build;
@@ -24,17 +25,18 @@ namespace Telewheel
     /// Runs before every player build. Telewheel's UI looks its shaders up by name at runtime
     /// (<c>Shader.Find</c>), and a build only contains a shader that something references or that is
     /// listed in Always Included Shaders, so a UI that works in the editor can come out pink or invisible
-    /// on a headset. This makes sure the shaders it needs are listed. <c>BuildTiltBrush.DoBuild</c> puts
-    /// GraphicsSettings.asset back afterwards, so the committed file does not change.
+    /// on a headset. This makes sure the shaders it needs are listed for the build, and takes out the ones
+    /// it added afterwards, so GraphicsSettings.asset is left as it was (<c>BuildTiltBrush.DoBuild</c> also
+    /// restores the file, but a build started from Unity's own dialog does not).
     /// </summary>
-    public class TelewheelBuildPrep : IPreprocessBuildWithReport
+    public class TelewheelBuildPrep : IPreprocessBuildWithReport, IPostprocessBuildWithReport
     {
         private const string LogPrefix = "[Telewheel build prep]";
 
         // After UrpBrushShaderWarmup, which also edits the graphics settings.
         public int callbackOrder => 10;
 
-        // The first is the one the UI is drawn with; a build without it fails rather than shipping a blank UI.
+        // The first is the one the UI is drawn with. If it cannot be found, TwGfx falls back to the others.
         private static readonly string[] AlwaysIncluded =
         {
             "Unlit/Color",
@@ -44,13 +46,27 @@ namespace Telewheel
             "TextMeshPro/Mobile/Distance Field",
         };
 
+        // The shaders this build added, to take out again when it is over.
+        private static readonly List<Shader> s_Added = new List<Shader>();
+
         public void OnPreprocessBuild(BuildReport report)
         {
-            EnsureAlwaysIncludedShaders();
+            EnsureAlwaysIncludedShaders(s_Added);
         }
 
+        public void OnPostprocessBuild(BuildReport report)
+        {
+            RemoveAdded();
+        }
+
+        /// <summary>For people who want the shaders listed for good, in the project settings.</summary>
         [MenuItem("Telewheel/Build/Add UI Shaders To Always Included")]
-        public static void EnsureAlwaysIncludedShaders()
+        public static void AddUiShadersPermanently()
+        {
+            EnsureAlwaysIncludedShaders(null);
+        }
+
+        private static void EnsureAlwaysIncludedShaders(List<Shader> added)
         {
             Object graphicsSettings = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset")
                 .FirstOrDefault();
@@ -71,11 +87,6 @@ namespace Telewheel
                 Shader shader = Shader.Find(name);
                 if (shader == null)
                 {
-                    if (name == AlwaysIncluded[0])
-                    {
-                        throw new BuildFailedException(
-                            LogPrefix + " the shader " + name + " was not found, so Telewheel's UI would be blank.");
-                    }
                     Debug.LogWarning(LogPrefix + " the shader " + name + " was not found; the UI falls back to another.");
                     continue;
                 }
@@ -85,6 +96,10 @@ namespace Telewheel
                 }
                 list.InsertArrayElementAtIndex(list.arraySize);
                 list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = shader;
+                if (added != null)
+                {
+                    added.Add(shader);
+                }
                 changed = true;
                 Debug.Log(LogPrefix + " added " + name + " to Always Included Shaders.");
             }
@@ -93,6 +108,41 @@ namespace Telewheel
                 serialized.ApplyModifiedProperties();
                 EditorUtility.SetDirty(graphicsSettings);
             }
+        }
+
+        private static void RemoveAdded()
+        {
+            if (s_Added.Count == 0)
+            {
+                return;
+            }
+            Object graphicsSettings = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset")
+                .FirstOrDefault();
+            SerializedProperty list = null;
+            SerializedObject serialized = null;
+            if (graphicsSettings != null)
+            {
+                serialized = new SerializedObject(graphicsSettings);
+                list = serialized.FindProperty("m_AlwaysIncludedShaders");
+            }
+            if (list != null && list.isArray)
+            {
+                foreach (Shader shader in s_Added)
+                {
+                    for (int i = list.arraySize - 1; i >= 0; i--)
+                    {
+                        if (list.GetArrayElementAtIndex(i).objectReferenceValue == shader)
+                        {
+                            // Deleting a non-null object reference only clears it; the second call removes the slot.
+                            list.GetArrayElementAtIndex(i).objectReferenceValue = null;
+                            list.DeleteArrayElementAtIndex(i);
+                            break;
+                        }
+                    }
+                }
+                serialized.ApplyModifiedProperties();
+            }
+            s_Added.Clear();
         }
 
         private static bool Contains(SerializedProperty list, Shader shader)

@@ -28,6 +28,8 @@ internal static class TelewheelAndroidManifest
     internal const string ToolsNamespace = "http://schemas.android.com/tools";
 
     internal const string ManageExternalStorage = "android.permission.MANAGE_EXTERNAL_STORAGE";
+    internal const string WriteExternalStorage = "android.permission.WRITE_EXTERNAL_STORAGE";
+    internal const string ReadExternalStorage = "android.permission.READ_EXTERNAL_STORAGE";
     internal const string PassthroughFeature = "com.oculus.feature.PASSTHROUGH";
     internal const string HandTrackingPermission = "com.oculus.permission.HAND_TRACKING";
     internal const string HandTrackingFeature = "oculus.software.handtracking";
@@ -41,9 +43,12 @@ internal static class TelewheelAndroidManifest
             ?? throw new InvalidOperationException("Missing Android application element.");
         root.SetAttribute("xmlns:tools", ToolsNamespace);
 
-        // Telewheel never touches shared storage. The permission needs a manual grant on Quest ("All files
-        // access"), which the Meta store questions and which used to block startup.
+        // Telewheel never touches shared storage. The first needs a manual grant on Quest ("All files
+        // access"), which the Meta store questions and which used to block startup; Unity adds the other
+        // two itself while "Force SD card permission" is on. Its own folder needs none of them.
         MarkRemoved(doc, root, "uses-permission", ManageExternalStorage);
+        MarkRemoved(doc, root, "uses-permission", WriteExternalStorage);
+        MarkRemoved(doc, root, "uses-permission", ReadExternalStorage);
         RemoveApplicationAttribute(app, "requestLegacyExternalStorage");
 
         // Passthrough (mixed reality). Optional, so the app still installs on a device without it.
@@ -66,15 +71,20 @@ internal static class TelewheelAndroidManifest
     private static void RemoveApplicationAttribute(XmlElement app, string name)
     {
         app.RemoveAttribute(name, AndroidNamespace);
-        string qualified = "android:" + name;
-        string existing = app.GetAttribute("remove", ToolsNamespace);
+        AddToolsValue(app, "remove", "android:" + name);
+    }
+
+    // tools:remove and tools:replace hold a comma-separated list; add to it, never overwrite it.
+    private static void AddToolsValue(XmlElement element, string attribute, string value)
+    {
+        string existing = element.GetAttribute(attribute, ToolsNamespace);
         if (string.IsNullOrEmpty(existing))
         {
-            app.SetAttribute("remove", ToolsNamespace, qualified);
+            element.SetAttribute(attribute, ToolsNamespace, value);
         }
-        else if (Array.IndexOf(existing.Split(','), qualified) < 0)
+        else if (Array.IndexOf(existing.Split(','), value) < 0)
         {
-            app.SetAttribute("remove", ToolsNamespace, existing + "," + qualified);
+            element.SetAttribute(attribute, ToolsNamespace, existing + "," + value);
         }
     }
 
@@ -83,14 +93,14 @@ internal static class TelewheelAndroidManifest
         XmlElement feature = GetOrCreate(doc, parent, "uses-feature", name);
         feature.SetAttribute("required", AndroidNamespace, required ? "true" : "false");
         // A library manifest may ask for required=true; this build decides.
-        feature.SetAttribute("replace", ToolsNamespace, "android:required");
+        AddToolsValue(feature, "replace", "android:required");
     }
 
     private static void SetMetadata(XmlDocument doc, XmlElement parent, string name, string value)
     {
         XmlElement node = GetOrCreate(doc, parent, "meta-data", name);
         node.SetAttribute("value", AndroidNamespace, value);
-        node.SetAttribute("replace", ToolsNamespace, "android:value");
+        AddToolsValue(node, "replace", "android:value");
     }
 
     private static XmlElement GetOrCreate(XmlDocument doc, XmlElement parent, string tag, string name)

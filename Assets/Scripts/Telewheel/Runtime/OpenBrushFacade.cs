@@ -299,7 +299,8 @@ namespace Telewheel
         /// </summary>
         public static bool TryGetPointerRay(out Ray ray)
         {
-            if (!IsMonoscopic && InputManager.Brush.IsTrackedObjectValid)
+            // A controller that is only connected (put down while the hands are tracked) is not the pointer.
+            if (!IsMonoscopic && InputManager.Brush.IsTrackedObjectValid && !HandPointerActive)
             {
                 Transform attach = InputManager.m_Instance.GetBrushControllerAttachPoint();
                 if (attach != null)
@@ -308,8 +309,8 @@ namespace Telewheel
                     return true;
                 }
             }
-            // No controller: a tracked hand points instead (Quest hand tracking).
-            if (!IsMonoscopic && TryGetHandRay(out ray))
+            // No controller in use: a tracked hand points instead (Quest hand tracking).
+            if (HandPointerActive && TryGetHandRay(out ray))
             {
                 return true;
             }

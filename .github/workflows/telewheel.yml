@@ -13,6 +13,13 @@ on:  # yamllint disable-line rule:truthy
       - 'Assets/Scripts/Multiplayer/**'
       - 'Assets/Scripts/SketchControlsScript.cs'
       - 'Assets/Editor/TelewheelPhotonSetup.cs'
+      - 'Assets/Editor/Telewheel/**'
+      - 'Assets/Editor/AndroidStoreManifest.cs'
+      - 'Assets/Editor/BuildTiltBrush.cs'
+      - 'Assets/Editor/BuildTiltBrushPostProcess.cs'
+      - 'Assets/Scripts/App.cs'
+      - 'Assets/Scripts/LoadingScene.cs'
+      - 'Support/Python/telewheel_check_manifest.py'
       - 'ProjectSettings/ProjectSettings.asset'
       - '.github/workflows/telewheel.yml'
   push:
