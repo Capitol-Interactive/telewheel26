@@ -592,6 +592,36 @@ jobs:
             build/${{ matrix.vrsdk }}
             !build/**/*_BackUpThisFolder_ButDontShipItWithYourGame
 
+      # Telewheel: read the merged manifest of the finished Quest APK, so a manifest problem shows up on
+      # the pull request without waiting for telewheel-quest-inspect.yml (which only runs once merged).
+      - name: Check the Telewheel Quest manifest
+        if: matrix.name == 'Android Meta Quest'
+        continue-on-error: true  # An aapt2 layout surprise must not fail the build; the report is in the job summary
+        shell: bash
+        run: |
+          mapfile -d '' APKS < <(find build -name '*.apk' -print0 | sort -z)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::warning::No APK was built, so there is no manifest to check."
+            exit 0
+          fi
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -n 1)
+          echo "Inspecting ${APKS[0]} with $AAPT2"
+          "$AAPT2" dump xmltree --file AndroidManifest.xml "${APKS[0]}" > manifest-dump.txt
+          status=0
+          python3 -I Support/Python/telewheel_check_manifest.py manifest-dump.txt > manifest-report.md || status=1
+          {
+            cat manifest-report.md
+            echo
+            echo "<details><summary>The full manifest</summary>"
+            echo
+            echo '```'
+            cat manifest-dump.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat manifest-report.md
+          exit "$status"
+
       - name: Check if packages-lock.json has changed or if it's cacheable
         if: false
         id: check_packagecache
