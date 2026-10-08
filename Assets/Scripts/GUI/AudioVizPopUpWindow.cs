@@ -42,7 +42,7 @@ namespace TiltBrush
             TextMeshPro hintText = m_HintText.GetComponent<TextMeshPro>();
             if (hintText != null)
             {
-                hintText.text = "Play audio in Open Brush";
+                hintText.text = $"Play audio in {App.kAppDisplayName}";
             }
 #endif
             m_AudioFound = false;

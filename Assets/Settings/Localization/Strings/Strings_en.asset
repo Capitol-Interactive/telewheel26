@@ -1390,7 +1390,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76072667581046784
-    m_Localized: 'Update Open Brush to share
+    m_Localized: 'Update Telewheel to share
 
       sketches to Icosa and Sketchfab'
     m_Metadata:
@@ -1400,7 +1400,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76081074568486912
-    m_Localized: 'Signing in requires exiting Open Brush.
+    m_Localized: 'Signing in requires exiting Telewheel.
 
       We suggest saving your work
 
@@ -1538,7 +1538,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76119645530677248
-    m_Localized: "You're about to exit \nOpen Brush"
+    m_Localized: "You're about to exit \nTelewheel"
     m_Metadata:
       m_Items: []
   - m_Id: 76120862092746752
@@ -3462,7 +3462,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 170004956477833216
-    m_Localized: Please give Open Brush file access to save your creations!
+    m_Localized: Please give Telewheel file access to save your creations!
     m_Metadata:
       m_Items: []
   - m_Id: 172767995928834048
@@ -3494,11 +3494,11 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 217070349893754880
-    m_Localized: Open Brush Sketch Viewer
+    m_Localized: Telewheel Sketch Viewer
     m_Metadata:
       m_Items: []
   - m_Id: 218558579745579008
-    m_Localized: XR not enabled or found. More info on using Open Brush without VR
+    m_Localized: XR not enabled or found. More info on using Telewheel without VR
     m_Metadata:
       m_Items: []
   - m_Id: 176764812224364544

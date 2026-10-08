@@ -1,6 +1,6 @@
 # Splat settings
 
-Add a top-level `Splats` object to your existing `Open Brush.cfg` JSON, alongside
+Add a top-level `Splats` object to your existing `Telewheel.cfg` JSON, alongside
 sections such as `Flags`. Restart Open Brush after editing. These settings apply
 to imported Gaussian splats, including imports restored when loading a sketch.
 Omitted or `null` values preserve the existing asset/library/project defaults.

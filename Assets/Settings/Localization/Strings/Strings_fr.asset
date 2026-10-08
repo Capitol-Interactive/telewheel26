@@ -1323,7 +1323,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76081074568486912
-    m_Localized: "Il faut quitter Open Brush pour se connecter.\nNous vous conseillons d\u2019enregistrer votre\ntravail avant de continuer."
+    m_Localized: "Il faut quitter Telewheel pour se connecter.\nNous vous conseillons d\u2019enregistrer votre\ntravail avant de continuer."
     m_Metadata:
       m_Items: []
   - m_Id: 76084187576721408
@@ -1335,7 +1335,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76086604699590656
-    m_Localized: Quittez Open Brush pour finaliser la publication
+    m_Localized: Quittez Telewheel pour finaliser la publication
     m_Metadata:
       m_Items: []
   - m_Id: 76094622149435392
@@ -1453,7 +1453,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76119645530677248
-    m_Localized: "Vous \xEAtes sur le point de quitter\nOpen Brush"
+    m_Localized: "Vous \xEAtes sur le point de quitter\nTelewheel"
     m_Metadata:
       m_Items: []
   - m_Id: 76120862092746752
@@ -3487,7 +3487,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 218558579745579008
-    m_Localized: Plus d'informations sur l'utilisation d'Open Brush sans VR
+    m_Localized: Plus d'informations sur l'utilisation d'Telewheel sans VR
     m_Metadata:
       m_Items: []
   - m_Id: 294636769901092864

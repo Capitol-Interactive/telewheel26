@@ -49,7 +49,7 @@ namespace TiltBrush
         {
             OutputWindowScript.m_Instance.CreateInfoCardAtController(
                 InputManager.ControllerName.Brush,
-                $"Please restart Open Brush",
+                $"Please restart {App.kAppDisplayName}",
                 fPopScalar: 0.5f, false);
         }
     }

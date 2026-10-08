@@ -32,8 +32,9 @@ namespace TiltBrush
 {
     public class ApiManager : MonoBehaviour
     {
+        // Telewheel: identifies Telewheel, not Open Brush.
         public static string WebRequestUserAgent =>
-            $"OpenBrush/{Application.version} (https://openbrush.app/)";
+            $"Telewheel/{Application.version}";
         private const string ROOT_API_URL = "/api/v1";
         private const string BASE_USER_SCRIPTS_URL = "/scripts";
         private const string BASE_EXAMPLE_SCRIPTS_URL = "/examplescripts";

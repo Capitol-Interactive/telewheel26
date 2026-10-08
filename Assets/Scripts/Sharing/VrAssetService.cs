@@ -854,7 +854,7 @@ namespace TiltBrush
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string title = $"{uploadName}_{timestamp}";
             if (title.Length > 30) title = title.Substring(0, 30);
-            string description = currentScene.Valid ? currentScene.HumanName : "Uploaded from Open Brush";
+            string description = currentScene.Valid ? currentScene.HumanName : $"Uploaded from {App.kAppDisplayName}";
 
             SetUploadProgress(UploadStep.CreateGltf, 0);
 

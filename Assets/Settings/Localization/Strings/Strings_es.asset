@@ -1345,7 +1345,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76081074568486912
-    m_Localized: "Iniciar sesi\xF3n requiere salir de Open Brush.\nSugerimos guardar tu trabajo\nantes de continuar."
+    m_Localized: "Iniciar sesi\xF3n requiere salir de Telewheel.\nSugerimos guardar tu trabajo\nantes de continuar."
     m_Metadata:
       m_Items: []
   - m_Id: 76084187576721408
@@ -1357,7 +1357,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76086604699590656
-    m_Localized: Sal de Open Brush para terminar de publicar
+    m_Localized: Sal de Telewheel para terminar de publicar
     m_Metadata:
       m_Items: []
   - m_Id: 76094622149435392
@@ -1475,7 +1475,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76119645530677248
-    m_Localized: "Est\xE1s a punto de salir de \nOpen Brush"
+    m_Localized: "Est\xE1s a punto de salir de \nTelewheel"
     m_Metadata:
       m_Items: []
   - m_Id: 76120862092746752
@@ -3521,7 +3521,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 218558579745579008
-    m_Localized: "M\xE1s informaci\xF3n sobre c\xF3mo usar Open Brush sin VR"
+    m_Localized: "M\xE1s informaci\xF3n sobre c\xF3mo usar Telewheel sin VR"
     m_Metadata:
       m_Items: []
   - m_Id: 294636769901092864

@@ -735,7 +735,7 @@ namespace TiltBrush
                 collider.size = asset.Bounds.size;
 
                 warningsOut.Add(
-                    "Gaussian splat models are viewable in Open Brush, but are not exportable as mesh geometry.");
+                    $"Gaussian splat models are viewable in {App.kAppDisplayName}, but are not exportable as mesh geometry.");
                 IsGsplatModel = true;
                 m_AllowExport = false;
                 return root;

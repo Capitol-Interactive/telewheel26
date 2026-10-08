@@ -125,11 +125,9 @@ namespace TiltBrush
         }
 
         [Test]
-        public void TestWebRequestUserAgentIdentifiesOpenBrush()
+        public void TestWebRequestUserAgentIdentifiesTelewheel()
         {
-            StringAssert.StartsWith("OpenBrush/", ApiManager.WebRequestUserAgent);
-            StringAssert.Contains(
-                "(https://openbrush.app/)", ApiManager.WebRequestUserAgent);
+            StringAssert.StartsWith("Telewheel/", ApiManager.WebRequestUserAgent);
         }
 
         [Test]

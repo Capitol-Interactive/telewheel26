@@ -39,7 +39,7 @@ static class BuildTiltBrush
     // Types, consts, enums
 
     // The vendor name - used for the company name in builds and fbx output. Can have spaces.
-    public const string kDisplayVendorName = "Icosa Foundation";
+    public const string kDisplayVendorName = "Capitol Interactive"; // Telewheel (was "Icosa Foundation")
     // The vendor name as the reverse DNS - used for naming mobile builds - shouldn't have spaces.
     public const string kVendorReverseDNS = "foundation.icosa";
 

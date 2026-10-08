@@ -1315,7 +1315,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76081074568486912
-    m_Localized: "\uC0AC\uC778\uC778\uD558\uB824\uBA74 Open Brush\uB97C \uC885\uB8CC\uD574\uC57C \uD569\uB2C8\uB2E4.\n\uACC4\uC18D \uC9C4\uD589\uD558\uAE30 \uC804\uC5D0 \uD604\uC7AC \uC791\uC5C5\uC744\n\uC800\uC7A5\uD558\uC2E4 \uAC83\uC744 \uAD8C\uC7A5\uD569\uB2C8\uB2E4."
+    m_Localized: "\uC0AC\uC778\uC778\uD558\uB824\uBA74 Telewheel\uB97C \uC885\uB8CC\uD574\uC57C \uD569\uB2C8\uB2E4.\n\uACC4\uC18D \uC9C4\uD589\uD558\uAE30 \uC804\uC5D0 \uD604\uC7AC \uC791\uC5C5\uC744\n\uC800\uC7A5\uD558\uC2E4 \uAC83\uC744 \uAD8C\uC7A5\uD569\uB2C8\uB2E4."
     m_Metadata:
       m_Items: []
   - m_Id: 76084187576721408
@@ -1327,7 +1327,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 76086604699590656
-    m_Localized: "Open Brush\uB97C \uC885\uB8CC\uD574\uC11C \uD37C\uBE14\uB9AC\uC2F1 \uC885\uB8CC"
+    m_Localized: "Telewheel\uB97C \uC885\uB8CC\uD574\uC11C \uD37C\uBE14\uB9AC\uC2F1 \uC885\uB8CC"
     m_Metadata:
       m_Items: []
   - m_Id: 76094622149435392
@@ -3459,7 +3459,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 218558579745579008
-    m_Localized: "VR \uC5C6\uC774 Open Brush \uC0AC\uC6A9\uC5D0 \uB300\uD55C \uC790\uC138\uD55C \uC815\uBCF4"
+    m_Localized: "VR \uC5C6\uC774 Telewheel \uC0AC\uC6A9\uC5D0 \uB300\uD55C \uC790\uC138\uD55C \uC815\uBCF4"
     m_Metadata:
       m_Items: []
   - m_Id: 294636769901092864
